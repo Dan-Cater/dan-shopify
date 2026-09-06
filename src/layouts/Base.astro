@@ -1,0 +1,755 @@
+---
+import '../styles/global.css';
+import Nav from '../components/Nav.astro';
+import Footer from '../components/Footer.astro';
+import { ClientRouter } from 'astro:transitions';
+import { personSchema } from '../data/author';
+
+interface BreadcrumbItem {
+  label: string;
+  href?: string;
+}
+
+interface Props {
+  title: string;
+  description: string;
+  canonical?: string;
+  ogTitle?: string;
+  ogDescription?: string;
+  ogImage?: string;
+  schema?: object | object[];
+  noindex?: boolean;
+  pageType?: 'website' | 'article' | 'product';
+  updatedDate?: string;
+  publishDate?: string;
+  verifiedDate?: string;
+  breadcrumb?: BreadcrumbItem[];
+}
+
+const {
+  title,
+  description,
+  canonical: _rawCanonical,
+  ogTitle,
+  ogDescription,
+  ogImage,
+  schema,
+  noindex = false,
+  pageType = 'website',
+  updatedDate,
+  publishDate,
+  verifiedDate,
+  breadcrumb,
+} = Astro.props;
+
+// verifiedDate marks when a human last checked the page's factual claims
+// (pricing, limits, eligibility rules) against their live source — distinct
+// from updatedDate, which just means the page content changed. When it's
+// the more recent of the two, it's the more honest "last confirmed accurate"
+// signal, so it wins for dateModified.
+function parseDate(d?: string): Date | null {
+  if (!d) return null;
+  const dt = new Date(d);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+}
+const updatedDt = parseDate(updatedDate);
+const verifiedDt = parseDate(verifiedDate);
+const verifiedIsNewer = verifiedDt !== null && (updatedDt === null || verifiedDt > updatedDt);
+const bestModifiedDate = verifiedIsNewer ? verifiedDate : (updatedDate || publishDate || undefined);
+const verifiedDateDisplay = verifiedDt
+  ? verifiedDt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+  : null;
+
+// Always force canonical to the primary non-www domain.
+// Matches astro.config.mjs `trailingSlash: 'always'` — every canonical
+// ends with `/` to prevent duplicate-URL splits in GSC indexing.
+// Corrects www., bare paths, and trailing-slash mismatches from any page.
+const canonical = (() => {
+  const raw = _rawCanonical ?? Astro.url.pathname;
+  let path;
+  try {
+    path = raw.startsWith('http') ? new URL(raw).pathname : raw;
+  } catch {
+    path = Astro.url.pathname;
+  }
+  // Enforce trailing slash (unless it's a file path ending in an extension)
+  if (!path.endsWith('/') && !/\.[a-z0-9]{2,5}$/i.test(path)) {
+    path = path + '/';
+  }
+  // Collapse any accidental double slashes
+  path = path.replace(/\/+/g, '/');
+  return 'https://stackarchitect.xyz' + path;
+})();
+
+const schemaArray = schema
+  ? Array.isArray(schema)
+    ? schema
+    : [schema]
+  : [];
+
+const siteNavSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'SiteNavigationElement',
+  name: [
+    'Home',
+    'CAPI Shield',
+    'Stocky Swap',
+    'TikTok Events API',
+    'Replace Klaviyo Free',
+    'Shopify P&L Automation',
+    'All Guides',
+    'Ultimate Automation Guide',
+    'Shopify Automation Scanner',
+    'App Cost Calculator',
+    'Best AI Tools for Shopify',
+  ],
+  url: [
+    'https://stackarchitect.xyz/',
+    'https://stackarchitect.xyz/capi-shield/',
+    'https://stackarchitect.xyz/stocky-swap/',
+    'https://stackarchitect.xyz/tiktok-events-api-shopify/',
+    'https://stackarchitect.xyz/replace-klaviyo-free/',
+    'https://stackarchitect.xyz/shopify-profit-loss-automation/',
+    'https://stackarchitect.xyz/shopify-automation-guides/',
+    'https://stackarchitect.xyz/ultimate-shopify-automation-guide/',
+    'https://stackarchitect.xyz/shopify-app-stack-kill-or-keep-auditor/',
+    'https://stackarchitect.xyz/shopify-app-cost-calculator/',
+    'https://stackarchitect.xyz/best-ai-tools-shopify/',
+  ],
+};
+
+const orgSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  '@id': 'https://stackarchitect.xyz/#org',
+  'name': 'Stack Architect',
+  'url': 'https://stackarchitect.xyz',
+  'logo': {
+    '@type': 'ImageObject',
+    'url': 'https://stackarchitect.xyz/icon-512.png',
+    'width': 512,
+    'height': 512,
+  },
+  'description': 'Free Shopify automation tools replacing $700+/month of paid apps. Server-side tracking, inventory management, email marketing, TikTok Events API, P&L reporting. No code required.',
+  'contactPoint': {
+    '@type': 'ContactPoint',
+    'email': 'support@stackarchitect.xyz',
+    'contactType': 'customer support',
+  },
+  'sameAs': [
+    'https://www.linkedin.com/in/luke-stackarchitect',
+    'https://www.linkedin.com/company/stack-architect-xyz/',
+    'https://github.com/lsb11',
+    'https://github.com/lsb11/shopify-capi-validator',
+  ],
+};
+
+
+// The canonical Person node now lives in src/data/author.ts, which
+// AuthorCard.astro also reads for the visible byline — one set of facts, so
+// the rendered bio and the JSON-LD cannot drift apart. Base still emits it on
+// every page; no other file may define a Person with the #luke @id. Any page
+// needing Luke references { '@id': 'https://stackarchitect.xyz/#luke' }.
+
+// Site-wide WebSite node. 26+ pages reference "@id": ".../#website" in
+// isPartOf but the node was only defined on a handful of pages — a dangling
+// reference everywhere else. Defining it once here resolves it site-wide.
+const webSiteSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  '@id': 'https://stackarchitect.xyz/#website',
+  'url': 'https://stackarchitect.xyz/',
+  'name': 'Stack Architect',
+  'description':
+    'Free Shopify automation tools replacing $700+/month of paid apps — server-side tracking, inventory, email, TikTok Events API, P&L.',
+  'publisher': { '@id': 'https://stackarchitect.xyz/#org' },
+  'inLanguage': 'en-GB',
+};
+
+// ── Auto-BreadcrumbList ─────────────────────────────────────────────
+// 36 pages shipped without BreadcrumbList structured data (blog posts had
+// it via BlogPost.astro; most .astro pages didn't). Generate one from the
+// URL path on any indexable page that doesn't already declare one —
+// checked recursively so @graph-embedded breadcrumbs aren't duplicated.
+const canonicalPath = new URL(canonical).pathname;
+
+// ── Schema collision guards ──────────────────────────────────────────
+// Both guards used to inspect only the `schema` prop. Almost every page
+// injects its JSON-LD through the `head` slot instead (<Fragment slot="head">),
+// which the prop never sees — so Base cheerfully emitted a second WebSite and
+// a second BreadcrumbList on top of the page's own. That shipped site-wide:
+// 23 of 120 pages carried a duplicate #website @id and 28 carried a duplicate
+// node type. Deleting the offending nodes page-by-page would have left the
+// guard just as blind for the next page that uses the slot.
+//
+// Rendering the slot here lets the guard see every node that actually reaches
+// <head>, whichever route it took. The template below still renders
+// <slot name="head" /> exactly as before, so emitted markup is unchanged —
+// this render is for inspection only.
+const headSlotHtml = Astro.slots.has('head') ? await Astro.slots.render('head') : '';
+
+// Parse the blocks rather than substring-matching the raw string: "WebSite"
+// and "BreadcrumbList" both occur inside prose descriptions on this site, and
+// a false positive silently suppresses a node that genuinely was missing.
+function collectSchemaTypes(...sources: unknown[]): Set<string> {
+  const types = new Set<string>();
+  const walk = (node: any): void => {
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (!node || typeof node !== 'object') return;
+    const t = node['@type'];
+    if (typeof t === 'string') types.add(t);
+    else if (Array.isArray(t)) t.forEach((x) => typeof x === 'string' && types.add(x));
+    Object.values(node).forEach(walk);
+  };
+  for (const src of sources) {
+    if (typeof src === 'string') {
+      for (const m of src.matchAll(
+        /<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi,
+      )) {
+        try { walk(JSON.parse(m[1])); } catch { /* malformed block — ignore */ }
+      }
+    } else walk(src);
+  }
+  return types;
+}
+
+const declaredSchemaTypes = collectSchemaTypes(schemaArray, headSlotHtml);
+const alreadyHasBreadcrumbSchema = declaredSchemaTypes.has('BreadcrumbList');
+const alreadyHasWebSiteSchema = declaredSchemaTypes.has('WebSite');
+
+function humanizeSlug(slug: string): string {
+  const overrides: Record<string, string> = {
+    'capi-shield': 'CAPI Shield',
+    'pro': 'Complete Kit',
+    'blog': 'Guides',
+    'tools': 'Tools',
+    'faq': 'FAQ',
+    'stack': 'The Recommended Stack',
+  };
+  if (overrides[slug]) return overrides[slug];
+  return slug
+    .split('-')
+    .map((w) => {
+      const upper: Record<string, string> = {
+        'ai': 'AI', 'pl': 'P&L', 'roas': 'ROAS', 'emq': 'EMQ', 'ga4': 'GA4',
+        'ios': 'iOS', 'api': 'API', 'seo': 'SEO', 'vs': 'vs', 'io': 'io',
+        'tiktok': 'TikTok', 'bfcm': 'BFCM', 'crm': 'CRM', 'cro': 'CRO',
+      };
+      if (upper[w]) return upper[w];
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(' ');
+}
+
+let autoBreadcrumbSchema: object | null = null;
+if (!alreadyHasBreadcrumbSchema && !noindex && canonicalPath !== '/') {
+  const segments = canonicalPath.split('/').filter(Boolean);
+  const items = [
+    { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://stackarchitect.xyz/' },
+  ];
+  let acc = '';
+  segments.forEach((seg, i) => {
+    acc += '/' + seg;
+    const isLast = i === segments.length - 1;
+    items.push({
+      '@type': 'ListItem',
+      position: i + 2,
+      // Final crumb: use the page's H1-ish title (strip brand suffix) for accuracy.
+      name: isLast ? (title.split('—')[0].split('|')[0].trim() || humanizeSlug(seg)) : humanizeSlug(seg),
+      // Per Google guidance the final item may omit `item`.
+      // '/blog/' has no index page — the real guides hub is /shopify-automation-guides/.
+      ...(isLast
+        ? {}
+        : {
+            item:
+              seg === 'blog'
+                ? 'https://stackarchitect.xyz/shopify-automation-guides/'
+                : `https://stackarchitect.xyz${acc}/`,
+          }),
+    });
+  });
+  autoBreadcrumbSchema = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    'itemListElement': items,
+  };
+}
+
+const routeSlug = canonicalPath === '/' ? 'home' : canonicalPath.replace(/^\/|\/$/g, '');
+const computedOgImage = ogImage 
+  ? (ogImage.startsWith('http') ? ogImage : 'https://stackarchitect.xyz' + ogImage) 
+  : `https://stackarchitect.xyz/og/${routeSlug}.png`;
+
+const articleSchema = pageType === 'article' ? {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  'headline': title.split('—')[0].split('|')[0].trim(),
+  'description': description,
+  'image': computedOgImage,
+  'datePublished': publishDate || updatedDate || new Date().toISOString(),
+  'dateModified': bestModifiedDate || new Date().toISOString(),
+  'author': { '@id': 'https://stackarchitect.xyz/#luke' },
+  'publisher': { '@id': 'https://stackarchitect.xyz/#org' },
+  'mainEntityOfPage': { '@type': 'WebPage', '@id': canonical }
+} : null;
+
+const allSchemas = [
+  ...schemaArray,
+  siteNavSchema,
+  orgSchema,
+  personSchema,
+  ...(alreadyHasWebSiteSchema ? [] : [webSiteSchema]),
+  ...(autoBreadcrumbSchema ? [autoBreadcrumbSchema] : []),
+  ...(articleSchema ? [articleSchema] : []),
+];
+
+const hasBreadcrumb = breadcrumb && breadcrumb.length > 0;
+---
+
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    {/*
+      CRITICAL SHELL — the fallback for when the main stylesheet is missing.
+
+      global.css is a ~64 KB external file with a content hash in its name, so
+      every deploy changes that filename. During the window between Cloudflare
+      Pages publishing new HTML and the matching /_astro/ asset reaching a given
+      edge node, a visitor gets HTML pointing at a stylesheet that node cannot
+      serve yet. Observed on 23 Aug 2026 minutes after a push: the page rendered
+      as an unstyled document — white ground, serif headings, blue underlined
+      links, prose running the full 2,000px viewport width. Both stylesheets
+      verified serving 200 immediately afterwards, so nothing was broken; the
+      reader simply arrived mid-deploy.
+
+      Rather than let that render as a 1996 text dump, these declarations paint
+      the dark ground and hold the reading measure.
+
+      HOW THE OFF-SWITCH WORKS — read this before editing.
+
+      A low CSS layer is NOT sufficient on its own. A layer only loses to rules
+      that exist; a fallback declaration for a property no other stylesheet sets
+      wins by default and becomes the live design. The first version of this
+      block set `main { max-width: 768px }`, nothing else in the site sets a
+      max-width on `main`, and so every page — the homepage included — was
+      clamped to a 768px column against the full-width nav. That was a live
+      regression caused by the safety net itself.
+
+      So the layout rules are gated on a sentinel: global.css declares
+      `--sa-css-loaded: none` on :root. When that file is present the variable
+      resolves and `max-width: none` means no constraint, so pages lay out
+      exactly as they always did. When the file is missing the variable is
+      undefined, the fallback value applies, and the page gets a readable
+      measure instead of full-bleed prose.
+
+      Consequence: if you remove `--sa-css-loaded` from global.css, every page
+      silently narrows to 768px. The two files are a pair.
+
+      Colour and font need no sentinel — global.css sets those properties on the
+      same elements, so the layer ordering alone is enough for them to lose.
+    */}
+    <style is:inline>
+      @layer sa-shell;
+      @layer sa-shell {
+        :root { color-scheme: dark; }
+        body {
+          background: #0c0f0d;
+          color: #b6c0ba;
+          font-family: Inter, system-ui, -apple-system, sans-serif;
+          margin: 0;
+          line-height: 1.7;
+        }
+        main {
+          max-width: var(--sa-css-loaded, 768px);
+          margin-inline: auto;
+          padding-inline: var(--sa-css-loaded-pad, 16px);
+        }
+        h1, h2, h3 { color: #f2f5f3; line-height: 1.2; }
+        a { color: #34d377; }
+        pre, code { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+        pre { overflow-x: auto; }
+      }
+    </style>
+
+    <!-- Primary SEO -->
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <ClientRouter fallback="swap" />
+    <link rel="canonical" href={canonical} />
+
+    <!-- Feed discovery: Googlebot, Bingbot and AI crawlers poll RSS for new URLs -->
+    <link
+      rel="alternate"
+      type="application/rss+xml"
+      title="Stack Architect — Shopify Automation Guides"
+      href="/rss.xml"
+    />
+    
+    <!-- AI Crawler / LLM discovery -->
+    <link
+      rel="alternate"
+      type="text/markdown"
+      title="Stack Architect AI Context (llms.txt)"
+      href="/llms.txt"
+    />
+
+    <!-- Performance: DNS prefetch for third-party scripts loaded later -->
+    <link rel="dns-prefetch" href="//www.googletagmanager.com" />
+    <link rel="dns-prefetch" href="//www.google-analytics.com" />
+    <meta
+      name="robots"
+      content={noindex
+        // `follow`, not `nofollow` (runbook §1.5): these pages stay reachable
+        // and their outbound equity should still reach the survivors. nofollow
+        // would strand every link on the 53 /apps/* pages and the legal pages.
+        ? 'noindex, follow'
+        : 'index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1'}
+    />
+
+    <!-- Preconnect to affiliate domains -->
+    <link rel="preconnect" href="https://www.make.com" />
+    <link rel="preconnect" href="https://systeme.io" />
+
+    <!-- Mobile browser chrome colour -->
+    <meta name="theme-color" content="#0c0f0d" />
+
+    <!-- Article modified time — only when a real date is known.
+         (Previously fell back to build time, which claimed every page was
+         modified on every deploy — a fake-freshness footprint.) -->
+    {bestModifiedDate && (
+      <meta property="article:modified_time" content={bestModifiedDate} />
+    )}
+
+    <!-- Open Graph -->
+    <meta property="og:title" content={ogTitle ?? title} />
+    <meta property="og:description" content={ogDescription ?? description} />
+    <meta property="og:type" content={pageType === 'article' ? 'article' : 'website'} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content="Stack Architect" />
+    <meta property="og:locale" content="en_GB" />
+    <meta property="og:image" content={computedOgImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={ogTitle ?? title} />
+
+    <!-- Twitter/X Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={ogTitle ?? title} />
+    <meta name="twitter:description" content={ogDescription ?? description} />
+    <meta name="twitter:image" content={computedOgImage} />
+
+    <!-- JSON-LD Schema -->
+    {allSchemas.map((s) => <script type="application/ld+json" set:html={JSON.stringify(s)} />)}
+
+    <!-- Favicon -->
+   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- GA4 + AttributionTracker — measurement ID G-TE6Z6CW514 -->
+    <!-- GA4_PLACEHOLDER_START -->
+    <script is:inline async src="https://www.googletagmanager.com/gtag/js?id=G-TE6Z6CW514"></script>
+    <script is:inline>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){window.dataLayer.push(arguments);}
+      window.gtag = gtag;
+      gtag('js', new Date());
+
+      // send_page_view:false — we fire page_view manually on astro:page-load
+      // so that view-transition navigations are counted correctly.
+      gtag('config', 'G-TE6Z6CW514', {
+        send_page_view: false,
+        // Keeps UTM/referrer attribution intact across the SPA-style router.
+        ignore_referrer: false
+      });
+
+      (function () {
+        'use strict';
+        try {
+          var LANDING_KEY = 'sa_landing';
+          var ATTR_COOKIE = 'sa_attr';
+          var BOUND_FLAG  = '__saTrackerBound';
+          var NOW = Date.now();
+
+          // ---------- landing / attribution capture ----------
+          function captureLanding() {
+            if (sessionStorage.getItem(LANDING_KEY)) return;
+            var url = new URL(window.location.href);
+            var refHost = 'direct';
+            try { if (document.referrer) refHost = new URL(document.referrer).hostname; } catch (e) {}
+            sessionStorage.setItem(LANDING_KEY, JSON.stringify({
+              path:       url.pathname,
+              ref:        refHost,
+              utm_source: url.searchParams.get('utm_source')   || '',
+              utm_medium: url.searchParams.get('utm_medium')   || '',
+              utm_camp:   url.searchParams.get('utm_campaign') || '',
+              gclid:      url.searchParams.get('gclid')        || '',
+              fbclid:     url.searchParams.get('fbclid')       || '',
+              ts:         NOW
+            }));
+          }
+          function getLanding() {
+            try { return JSON.parse(sessionStorage.getItem(LANDING_KEY) || '{}'); }
+            catch (e) { return {}; }
+          }
+          function setAttrCookie(payload) {
+            var expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+            document.cookie = ATTR_COOKIE + '=' + encodeURIComponent(JSON.stringify(payload)) +
+              '; path=/; expires=' + expires + '; SameSite=Lax; Secure';
+          }
+          function b64url(str) {
+            return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+          }
+
+          captureLanding();
+
+          // ---------- page_view (fires on first load AND every swap) ----------
+          var lastPageViewPath = null;
+          function sendPageView() {
+            var path = window.location.pathname + window.location.search;
+            if (path === lastPageViewPath) return;   // guard double-fire
+            lastPageViewPath = path;
+            var landing = getLanding();
+            gtag('event', 'page_view', {
+              page_title:    document.title,
+              page_location: window.location.href,
+              page_path:     window.location.pathname,
+              page_referrer: document.referrer || undefined,
+              landing_path:  landing.path || '',
+              utm_source:    landing.utm_source || '',
+              utm_campaign:  landing.utm_camp || ''
+            });
+          }
+
+          // Initial load. astro:page-load also fires on first load with
+          // ClientRouter, but we guard with lastPageViewPath so it is safe
+          // either way (and still works if ClientRouter is ever removed).
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', sendPageView, { once: true });
+          } else {
+            sendPageView();
+          }
+          document.addEventListener('astro:page-load', sendPageView);
+
+          // ---------- scroll depth (reset per page) ----------
+          var scrollMarks = {};
+          function resetScroll() { scrollMarks = {}; }
+          document.addEventListener('astro:page-load', resetScroll);
+
+          var scrollTick = false;
+          window.addEventListener('scroll', function () {
+            if (scrollTick) return;
+            scrollTick = true;
+            window.requestAnimationFrame(function () {
+              scrollTick = false;
+              var docH = document.documentElement.scrollHeight - window.innerHeight;
+              if (docH <= 0) return;
+              var pct = Math.round((window.scrollY / docH) * 100);
+              [25, 50, 75, 90].forEach(function (mark) {
+                if (pct >= mark && !scrollMarks[mark]) {
+                  scrollMarks[mark] = true;
+                  gtag('event', 'scroll_depth', {
+                    percent_scrolled: mark,
+                    page_path: window.location.pathname
+                  });
+                }
+              });
+            });
+          }, { passive: true });
+
+          // ---------- click tracking (bound once, survives swaps) ----------
+          if (!window[BOUND_FLAG]) {
+            window[BOUND_FLAG] = true;
+
+            document.addEventListener('click', function (e) {
+              var a = e.target.closest && e.target.closest('a');
+              if (!a || !a.href) return;
+
+              var href    = a.getAttribute('href') || '';
+              var absHref = a.href;
+              var landing = getLanding();
+              var sourcePage = window.location.pathname;
+
+              var isAffiliate = href.indexOf('/go/') === 0;
+              var isKitPage   = (href === '/pro/' || href.indexOf('/pro#') === 0 || href.indexOf('/pro/#') === 0);
+              var isStripe    = absHref.indexOf('buy.stripe.com') > -1;
+
+              // The CTA's own source string (brief section 5): written onto the
+              // link at build time by buildStripeUrl() in src/data/products.ts,
+              // and declared again as data-cta so non-Stripe CTAs — the chooser
+              // cards, which point at /pro/{slug}/ — are attributable too.
+              var ctaSource = a.getAttribute('data-cta') || '';
+              if (!ctaSource && isStripe) {
+                try { ctaSource = new URL(absHref).searchParams.get('client_reference_id') || ''; }
+                catch (err) {}
+              }
+
+              // --- outbound (non-affiliate external) — useful for GEO/referral insight
+              if (!isAffiliate && !isKitPage && !isStripe) {
+                var isExternal = false;
+                try { isExternal = new URL(absHref).hostname !== window.location.hostname; } catch (err) {}
+                if (isExternal) {
+                  gtag('event', 'outbound_click', {
+                    link_url: absHref,
+                    link_domain: (function () { try { return new URL(absHref).hostname; } catch (err) { return ''; } })(),
+                    source_page: sourcePage
+                  });
+                }
+                return;
+              }
+
+              // --- revenue-relevant clicks
+              setAttrCookie({
+                s:   sourcePage,
+                d:   isAffiliate ? href : (isStripe ? 'kit-stripe' : 'kit-page'),
+                l:   landing.path || '',
+                ref: landing.ref  || 'direct',
+                src: landing.utm_source || '',
+                cmp: landing.utm_camp   || '',
+                ts:  Date.now()
+              });
+
+              var partner = isAffiliate ? href.replace(/^\/go\//, '').replace(/\/$/, '') : '';
+
+              // This is now the SINGLE source of affiliate_click for /go/* links.
+              // shopify-automation-guides, stocky-swap and best-ai-tools-shopify
+              // each fired their own as well, so those three pages double-counted
+              // (stocky-swap up to 4x) and looked like the strongest performers
+              // purely because they were instrumented more times.
+              //
+              // link_text and link_position are recorded so placement and wording
+              // can be compared: which anchor copy earns clicks, and whether
+              // above-the-fold CTAs beat in-body links. Without these, GA4 can say
+              // a page gets clicks but not which link or where on the page.
+              var linkText = '';
+              try { linkText = (a.innerText || a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60); } catch (err) {}
+              // A fixed-position element (the sticky CTA) has no meaningful place
+              // in the document, so measuring one would report wherever the
+              // reader was scrolled and pollute the in-body placement figures it
+              // is meant to be compared against. Such links declare themselves.
+              var linkPosition = a.getAttribute('data-cta-position') || '';
+              if (!linkPosition) {
+                try {
+                  var docH = Math.max(1, document.documentElement.scrollHeight);
+                  var absTop = a.getBoundingClientRect().top + window.scrollY;
+                  linkPosition = String(Math.min(100, Math.max(0, Math.round(absTop / docH * 10) * 10)));
+                } catch (err) {}
+              }
+
+              gtag('event', isAffiliate ? 'affiliate_click' : 'kit_click', {
+                source_page:  sourcePage,
+                destination:  href,
+                partner:      partner,
+                cta_source:   ctaSource,
+                link_text:    linkText,
+                link_position: linkPosition,
+                landing_path: landing.path || '',
+                referrer:     landing.ref || 'direct',
+                utm_source:   landing.utm_source || '',
+                utm_campaign: landing.utm_camp || ''
+              });
+
+              if (isStripe) {
+                try {
+                  var stripeUrl = new URL(absHref);
+                  var payload = b64url(JSON.stringify({
+                    s:   sourcePage.slice(0, 40),
+                    l:   (landing.path || '').slice(0, 40),
+                    ref: (landing.ref  || '').slice(0, 30),
+                    src: (landing.utm_source || '').slice(0, 20),
+                    cmp: (landing.utm_camp   || '').slice(0, 20),
+                    ts:  Date.now()
+                  }));
+                  // Stripe gives us exactly ONE field, and two things want it.
+                  // This handler used to .set() the payload over whatever was
+                  // already there, which silently destroyed the CTA source that
+                  // buildStripeUrl had written at build time — so every source
+                  // string on /pro/{slug}/, the guide offers and the thanks-page
+                  // upsell reached Stripe as an opaque blob.
+                  //
+                  // Both now travel: the readable source first, so it is legible
+                  // in the dashboard against the payment exactly as brief
+                  // section 5 intends, then the session payload behind it.
+                  // Decode with: ref.split('__') -> [source, b64payload].
+                  // Stripe caps client_reference_id at 200 characters.
+                  var ref = ctaSource ? (ctaSource + '__' + payload) : payload;
+                  stripeUrl.searchParams.set('client_reference_id', ref.slice(0, 200));
+                  a.href = stripeUrl.toString();
+                } catch (err) {}
+              }
+            }, true);
+
+            // ---------- email signup + calculator use ----------
+            document.addEventListener('submit', function (e) {
+              var form = e.target;
+              if (!form || form.tagName !== 'FORM') return;
+              var hasEmail = form.querySelector('input[type="email"]');
+              if (hasEmail) {
+                gtag('event', 'email_signup', {
+                  source_page: window.location.pathname,
+                  form_id: form.id || form.getAttribute('name') || 'unnamed'
+                });
+              }
+            }, true);
+
+            // Fires once per page when a visitor interacts with any calculator
+            // or diagnostic input — your tools are the top-of-funnel for the kit.
+            var toolFired = {};
+            document.addEventListener('change', function (e) {
+              var el = e.target;
+              if (!el || !el.matches) return;
+              if (!el.matches('input[type="number"], input[type="range"], input[type="checkbox"], select')) return;
+              var p = window.location.pathname;
+              if (toolFired[p]) return;
+              toolFired[p] = true;
+              gtag('event', 'tool_use', { tool_path: p, tool_name: document.title });
+            }, true);
+          }
+        } catch (err) {}
+      })();
+    </script>
+    <!-- GA4_PLACEHOLDER_END -->
+
+<style>
+@media(hover:hover){.related-link-item:hover{border-bottom-color:rgba(52,211,119,.2) !important;}}
+@media(max-width:640px){
+  .related-link-item{padding:12px 0 !important;}
+  .related-link-item > div:last-child{display:none;}
+}
+</style>
+    <slot name="head" />
+  </head>
+  <body class="bg-black text-white font-sans min-h-screen flex flex-col">
+    <!-- Named slot so child layouts can position Nav before breadcrumb -->
+    <Nav />
+
+    {verifiedDateDisplay && (
+      <div class="verified-date-bar" style="text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;color:#93a09a;letter-spacing:.04em;padding:8px 16px;border-bottom:1px solid #222825;background:#0c0f0d;">
+        Pricing verified: {verifiedDateDisplay}
+      </div>
+    )}
+
+    <slot name="header" />
+
+    {hasBreadcrumb && (
+      <nav aria-label="Breadcrumb" class="breadcrumb">
+        {breadcrumb!.map((item, i) => (
+          <>
+            {i > 0 && <span class="breadcrumb-separator">/</span>}
+            {item.href
+              ? <a href={item.href}>{item.label}</a>
+              : <span>{item.label}</span>
+            }
+          </>
+        ))}
+      </nav>
+    )}
+
+    <slot />
+    <Footer />
+
+  </body>
+</html>

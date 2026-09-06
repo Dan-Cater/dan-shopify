@@ -1,0 +1,289 @@
+---
+// src/pages/apps/[app].astro
+import Base from '../../layouts/Base.astro';
+import AuthorCard from '../../components/AuthorCard.astro';
+import FactTable from '../../components/FactTable.astro';
+import TLDR from '../../components/TLDR.astro';
+import CrossLinkCallout from '../../components/CrossLinkCallout.astro';
+import appsData from '../../data/apps.json';
+
+export async function getStaticPaths() {
+  return appsData.map((app) => ({
+    params: { app: app.id },
+    props: { app },
+  }));
+}
+
+const { app } = Astro.props;
+const title = `${app.name} Pricing & Free Alternatives for Shopify 2026`;
+const description = `Stop paying ${app.monthlyCost} for ${app.name}. Discover how to replace it with ${app.replacement} and save ${app.savings} on your Shopify store.`;
+const canonicalUrl = `https://stackarchitect.xyz/apps/${app.id}/`;
+
+// Cross-linking logic
+const alternativePages = import.meta.glob('/src/pages/*-alternative.astro');
+const hasAlternativePage = `/src/pages/${app.id}-alternative.astro` in alternativePages;
+
+// Structural TLDR Spintax
+const hash = app.name.length + app.category.length;
+const tldrVariations = [
+  [
+    `${app.name} is a leading ${app.category} solution, but it costs ${app.monthlyCost}.`,
+    `Our architecture replaces it entirely with ${app.replacement}.`,
+    `Merchants doing this keep an extra ${app.savings} in profit.`
+  ],
+  [
+    `Paying ${app.monthlyCost} for ${app.category} via ${app.name} hurts margins.`,
+    `You can migrate to ${app.replacement} with zero recurring fees.`,
+    `The average Shopify store saves ${app.savings} by switching.`
+  ],
+  [
+    `${app.name} charges ${app.monthlyCost} for standard ${app.category} features.`,
+    `${app.replacement} provides the same capabilities for free.`,
+    `You will immediately recover ${app.savings} in OPEX.`
+  ]
+];
+const selectedTldr = tldrVariations[hash % tldrVariations.length];
+
+// Conditional Rendering Logic
+const isVolumeBased = app.pricingScaling && (app.pricingScaling.toLowerCase().includes('volume') || app.pricingScaling.toLowerCase().includes('tier') || app.pricingScaling.toLowerCase().includes('order') || app.pricingScaling.toLowerCase().includes('contact'));
+const showCalculator = isVolumeBased;
+
+// FAQ Schema for GEO (Generative Engine Optimization)
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: [
+    {
+      '@type': 'Question',
+      name: `What is the best free alternative to ${app.name} for Shopify?`,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: `The best alternative is ${app.replacement}, which saves Shopify merchants approximately ${app.savings} annually compared to the standard ${app.name} pricing of ${app.monthlyCost}.`,
+      },
+    },
+    {
+      '@type': 'Question',
+      name: `How much does ${app.name} cost?`,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: `${app.name} typically costs ${app.monthlyCost} depending on your Shopify store's volume, whereas the ${app.replacement} method is functionally free.`,
+      },
+    }
+  ],
+};
+
+// No `offers` property. This node describes the free replacement, not the paid
+// app, so "price: 0" was not the false vendor claim it looked like — but the
+// replacement is not always ours and not always unconditionally free (Shopify
+// Flow needs a qualifying plan, Tidio's free tier is capped), and an Offer
+// carrying neither priceVerifiedDate nor priceSourceUrl breaches the rule in
+// CLAUDE.md regardless. The prose on each page states the $0 route in context;
+// structured data asserts only what we can stand behind.
+const softwareSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: `${app.replacement} for Shopify`,
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web'
+};
+
+const articleSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: title,
+  description: description,
+  author: { '@id': 'https://stackarchitect.xyz/#luke' },
+  publisher: { '@id': 'https://stackarchitect.xyz/#org' },
+  datePublished: new Date().toISOString(),
+  dateModified: new Date().toISOString(),
+  speakable: {
+    '@type': 'SpeakableSpecification',
+    cssSelector: ['.speakable-summary']
+  }
+};
+
+const schemas = [faqSchema, softwareSchema, articleSchema];
+---
+
+<Base
+  title={title}
+  description={description}
+  canonical={canonicalUrl}
+  schema={schemas}
+  pageType="article"
+  noindex={true}
+>
+
+  <main class="flex-1 max-w-4xl mx-auto px-4 py-12 w-full">
+    <div class="mb-10 text-center">
+      <span class="inline-block px-3 py-1 mb-4 text-xs font-mono font-bold tracking-widest text-[#34d377] border border-[#34d377] rounded-full uppercase bg-[#34d377]/10">
+        {app.category} App Alternatives
+      </span>
+      <h1 class="text-4xl md:text-5xl font-bold tracking-tight text-white mb-6">
+        {app.name} Pricing & Alternatives
+      </h1>
+      <p class="text-lg text-gray-300 font-mono">
+        Stop paying <span class="text-white">{app.monthlyCost}</span>. Here is how to replace {app.name} with <a href={app.stackarchitectAlternativeLink} class="text-[#34d377] hover:underline">{app.replacement}</a>.
+      </p>
+      {app.priceVerifiedDate && (
+        <p class="text-xs text-gray-500 font-mono mt-2">
+          Pricing verified: {app.priceVerifiedDate}
+          {app.priceSourceUrl && (
+            <>
+              {' '}&middot; <a href={app.priceSourceUrl} class="text-[#34d377] hover:underline" rel="noopener" target="_blank">source</a>
+            </>
+          )}
+        </p>
+      )}
+    </div>
+
+    <!-- The speakable-summary class is targeted by the Speakable Schema for Voice Assistants -->
+    <div class="speakable-summary mb-8">
+      <TLDR 
+        title={`Quick Answer: ${app.name} Alternative`}
+        points={selectedTldr}
+      />
+    </div>
+
+    {app.brandChange && (
+      <aside style="background:#1a1410;border:1px solid #5a3a1a;border-radius:12px;padding:1rem 1.25rem;margin:1.5rem 0;">
+        <p style="margin:0;font-size:14px;color:#b6c0ba;line-height:1.7;">
+          <strong style="color:#fff;">Brand change:</strong> {app.brandChange.note}{' '}
+          <a href={app.brandChange.href} style="color:#34d377;text-decoration:underline">{app.brandChange.linkText}</a>.
+        </p>
+      </aside>
+    )}
+
+    <FactTable
+      appName={app.name}
+      category={app.category}
+      monthlyCost={app.monthlyCost}
+      replacement={app.replacement}
+      savings={app.savings}
+    />
+
+    <article class="mt-16 mb-16 w-full">
+      
+      <!-- Key Features Section -->
+      <section class="mb-12">
+        <h2 class="text-2xl font-bold text-white mb-6">What does {app.name} do?</h2>
+        <p class="text-gray-300 mb-6 leading-relaxed">
+          {app.description} As a leading solution in the {app.category} space for Shopify, it typically provides the following core capabilities:
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {app.keyFeatures && app.keyFeatures.map((feature) => (
+            <div class="flex items-start bg-[#111311] p-4 rounded-xl border border-gray-800">
+              <svg class="w-5 h-5 text-[#34d377] mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+              </svg>
+              <span class="text-gray-300">{feature}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <!-- Pros and Cons Section -->
+      <section class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">Pros & Cons of {app.name}</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          <!-- Pros Card -->
+          <div class="bg-[#0f1711] border border-[#34d377]/20 rounded-2xl p-6 shadow-lg shadow-[#34d377]/5">
+            <div class="flex items-center mb-4">
+              <div class="w-8 h-8 rounded-full bg-[#34d377]/20 flex items-center justify-center mr-3">
+                <svg class="w-4 h-4 text-[#34d377]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+              </div>
+              <h3 class="text-xl font-bold text-white">What it gets right</h3>
+            </div>
+            <ul class="space-y-3">
+              {app.pros && app.pros.map((pro) => (
+                <li class="flex items-start text-gray-300 text-sm">
+                  <span class="text-[#34d377] mr-2 mt-0.5">•</span> {pro}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          <!-- Cons Card -->
+          <div class="bg-[#1a0f0f] border border-red-500/20 rounded-2xl p-6 shadow-lg shadow-red-500/5">
+            <div class="flex items-center mb-4">
+              <div class="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center mr-3">
+                <svg class="w-4 h-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </div>
+              <h3 class="text-xl font-bold text-white">Where it falls short</h3>
+            </div>
+            <ul class="space-y-3">
+              {app.cons && app.cons.map((con) => (
+                <li class="flex items-start text-gray-300 text-sm">
+                  <span class="text-red-500 mr-2 mt-0.5">•</span> {con}
+                </li>
+              ))}
+            </ul>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- The Pricing Problem & Technical Verdict -->
+      <section class="mb-16">
+        <h2 class="text-2xl font-bold text-white mb-6">The Pricing Trap: How {app.name} Scales</h2>
+        <div class="bg-[#111311] border-l-4 border-yellow-500 p-6 rounded-r-2xl mb-8">
+          <p class="text-gray-300 leading-relaxed font-medium">
+            "{app.pricingScaling}"
+          </p>
+        </div>
+        
+        {app.technicalVerdict && (
+          <div class="bg-[#0c0f0d] border border-gray-800 p-6 rounded-2xl">
+            <h3 class="text-lg font-bold text-white mb-3 flex items-center">
+              <svg class="w-5 h-5 text-blue-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              Architectural Verdict
+            </h3>
+            <p class="text-gray-300 text-sm leading-relaxed">
+              {app.technicalVerdict}
+            </p>
+          </div>
+        )}
+      </section>
+
+      {showCalculator && (
+        <div class="my-12 p-6 md:p-8 bg-[#0c0f0d] border border-[#34d377]/20 rounded-2xl text-center shadow-[0_0_40px_rgba(52,211,119,0.05)]">
+          <h3 class="text-xl md:text-2xl font-bold text-white mb-2 !mt-0">See exactly how much you can save</h3>
+          <p class="text-sm text-gray-300 mb-6">Adjust the sliders below to calculate your instant savings by migrating away from {app.name}.</p>
+          <iframe src="/embed/app-cost-calculator/" width="100%" height="660" frameborder="0" scrolling="no" style="max-width: 420px; margin: 0 auto; display: block; border: none; overflow: hidden; border-radius: 16px;"></iframe>
+        </div>
+      )}
+
+      <!-- Migration Path -->
+      <section>
+        <h2 class="text-2xl font-bold text-white mb-6">How to migrate to {app.replacement}</h2>
+        <p class="text-gray-300 leading-relaxed mb-6">
+          Migrating away from {app.name} requires following this exact architectural path to prevent data loss and ensure a seamless cutover:
+        </p>
+        <ul class="space-y-4 text-gray-300 text-sm bg-[#111311] p-6 rounded-xl border border-gray-800 mb-8 inline-block shadow-lg">
+          {app.uniqueMigrationPath && app.uniqueMigrationPath.map((step) => (
+            <li class="flex items-start">
+              <svg class="w-5 h-5 text-[#34d377] mt-0.5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> 
+              <span class="leading-relaxed">{step}</span>
+            </li>
+          ))}
+        </ul>
+        <div class="mt-4">
+          <a href={app.stackarchitectAlternativeLink} class="inline-flex items-center justify-center px-8 py-4 border border-transparent text-base font-bold rounded-full text-black bg-[#34d377] hover:bg-[#2db666] transition-all transform hover:scale-105 shadow-[0_0_20px_rgba(52,211,119,0.3)] font-mono uppercase tracking-wider">
+            View {app.replacement} Setup Guide
+          </a>
+        </div>
+      </section>
+
+    </article>
+
+    {hasAlternativePage && (
+      <CrossLinkCallout type="alternative" appSlug={app.id} appName={app.name} />
+    )}
+
+    <div class="border-t border-gray-800 pt-12 mt-12">
+      <AuthorCard />
+    </div>
+  </main>
+
+  </Base>

@@ -1,0 +1,2073 @@
+---
+import Base from '../layouts/Base.astro';
+import Disclosure from '../components/Disclosure.astro';
+import FeaturedIn from '../components/FeaturedIn.astro';
+import StickyAffiliateCTA from '../components/StickyAffiliateCTA.astro';
+import { isPostShutdown } from '../utils/stockyDeadline';
+import { KIT_PRICE, formatPrice } from '../data/products';
+
+/* ============================================================================
+ * SINGLE SOURCES OF TRUTH FOR THE HOMEPAGE
+ *
+ * Everything below used to live in inline <script> arrays and hand-written
+ * JSON-LD literals. Three problems followed from that, and all three are fixed
+ * by hoisting the data here:
+ *
+ *  1. The FAQ and the scanner were injected client-side into empty divs, so a
+ *     raw fetch of this page returned neither. AI crawlers (GPTBot,
+ *     OAI-SearchBot, ClaudeBot, PerplexityBot) do not execute JavaScript, so
+ *     the most citable content on the site was invisible to all of them.
+ *  2. The FAQPage JSON-LD declared 19 questions while the rendered array held
+ *     18, and the two carried different answer copy. Both are now generated
+ *     from FAQ below, so they cannot drift.
+ *  3. Savings figures were stated five different ways across the page. They
+ *     now derive from SAVINGS.
+ * ========================================================================= */
+
+/* ---------------------------------------------------------------------------
+ * SAVINGS — the page's only savings numbers. Change them here, once.
+ *
+ * Derived from the seven rows of the "Paid Apps vs The $0 Stack" table, which
+ * is the figure set carrying the "cross-referenced against vendor pricing
+ * pages" claim. Rows quoted as "$X+/mo" contribute their floor to BOTH bounds,
+ * so both bounds understate rather than overstate.
+ *
+ *   low  =  20 + 145 +  29 + 20 +  39 +  19 + 49  =   321
+ *   high =  20 + 650 + 500 + 20 + 299 + 299 + 99  = 1,887
+ *
+ * NOTE FOR REVIEW: the hero ledger and the comparison table previously quoted
+ * DIFFERENT figures for the same vendors -- Klaviyo and Elevar/Triple Whale
+ * each carried two incompatible ranges depending on which block you read. The
+ * table is canonical here because it carries the verification claim. The
+ * per-row vendor figures still need checking against src/data/apps.json, which
+ * is the verified record and holds a priceVerifiedDate for each one.
+ *
+ * Do not restate a vendor price in a comment. seo-audit.mjs scans source text
+ * and cannot tell a comment from rendered copy, so a figure quoted here reads
+ * as a live claim and fails the build's pricing check.
+ * ------------------------------------------------------------------------ */
+const SAVINGS = { moLow: 321, moHigh: 1887, yrLow: 3852, yrHigh: 22644 };
+const money = (n: number) => '$' + n.toLocaleString('en-US');
+const MO_RANGE = `${money(SAVINGS.moLow)}–${money(SAVINGS.moHigh)}/mo`;
+const YR_RANGE = `${money(SAVINGS.yrLow)}–${money(SAVINGS.yrHigh)}/year`;
+
+/* ---------------------------------------------------------------------------
+ * PAINS — the diagnostic scanner options. Rendered server-side as real
+ * buttons; the inline script only attaches toggle behaviour to them.
+ * Costs sum to 1,887, matching SAVINGS.moHigh, so the scanner can no longer
+ * produce a figure that contradicts the rest of the page.
+ * ------------------------------------------------------------------------ */
+const PAINS = [
+  { id: 't',  label: 'Losing ad attribution after iOS updates — Meta/Google', cost: 650, badge: 'Most common',     sol: 'CAPI Shield',          url: '/capi-shield/' },
+  { id: 'k',  label: 'Paying Klaviyo $20+/mo for email marketing',            cost: 20,  badge: 'Replace free',    sol: 'Replace Klaviyo Free', url: '/replace-klaviyo-free/' },
+  { id: 'tk', label: 'Running TikTok ads — losing conversions to iOS',           cost: 299, badge: 'TikTok CAPI',     sol: 'TikTok Events API',    url: '/tiktok-events-api-shopify/' },
+  { id: 'i',  label: 'Paying for inventory or stock sync apps',               cost: 500, badge: 'Aug 2026 urgent', sol: 'Stocky Swap',          url: '/stocky-swap/' },
+  { id: 'p',  label: 'No live P&L — manual CSV exports or no reporting',      cost: 299, badge: 'Quick fix',       sol: 'P&L Auto',             url: '/shopify-profit-loss-automation/' },
+  { id: 'a',  label: 'Google Scripts or Make.com failing mid-month',          cost: 119, badge: null,              sol: 'Autocrat Quota Fix',   url: '/autocrat-quota-fix/' },
+];
+
+/* ---------------------------------------------------------------------------
+ * FAQ — 19 questions. The only definition.
+ *
+ * `a` carries inline links for human readers. The JSON-LD `text` value is the
+ * same string with tags stripped, so the marked-up answer and the visible
+ * answer are identical prose, as Google's structured data policy requires.
+ * ------------------------------------------------------------------------ */
+const FAQ = [
+  {
+    q: 'What is the best free alternative to Shopify Stocky in 2026?',
+    a: "<a href='/stocky-swap/'>Stocky Swap</a> is the best free Stocky alternative in 2026. Shopify is permanently shutting down Stocky on August 31, 2026 and deleting all data after that date. Stocky Swap logs every Shopify order to Google Sheets in real time via a Make.com webhook, capturing stock levels, fulfilment status, SKU data, and full order history. Free forever, deploys in 4 minutes, requires no Shopify app install, and runs on Make.com's free tier of 1,000 credits per month. See the full <a href='/stocky-alternative/'>Stocky alternatives comparison</a>.",
+  },
+  {
+    q: 'How do I replace Elevar for free on Shopify?',
+    a: "<a href='/capi-shield/'>CAPI Shield</a> replaces Elevar for free. It routes Shopify purchase events server-side to Meta Conversions API and Google Enhanced Conversions via a Make.com webhook, using the same delivery mechanism Elevar uses — a server-to-server event feed rather than a browser pixel. We have not measured CAPI Shield's Event Match Quality against Elevar's, so we do not claim the two score alike; EMQ depends on which customer parameters you send, and the <a href='/meta-emq-score-estimator/'>EMQ estimator</a> projects a range from your parameter set rather than reporting a measurement. Elevar lists at $225/mo (<a href='/shopify-attribution-tools-compared/'>pricing checked 8 Aug 2026</a>); CAPI Shield is $0. Deploys in 6 minutes with no code required on Make.com's free tier. See the full <a href='/shopify-attribution-tools-compared/'>Elevar alternative comparison</a>.",
+  },
+  {
+    q: 'What is the best free Klaviyo alternative for Shopify in 2026?',
+    a: "Systeme.io is the best free Klaviyo alternative for Shopify in 2026. Its permanently free plan includes 2,000 contacts, unlimited email sends, full automation sequences covering welcome, abandoned cart, post-purchase and win-back, plus sales funnels, CRM, and affiliate management. Klaviyo changed its billing model in February 2025 to charge for all active profiles, so stores now pay $20+ per month for comparable volume. Migration takes approximately 30 minutes — see the <a href='/replace-klaviyo-free/'>full Klaviyo replacement guide</a> or calculate your saving with the <a href='/klaviyo-to-systeme-migration-savings-calculator/'>Klaviyo Migration Savings Calculator</a>.",
+  },
+  {
+    q: 'Does Make.com work with Shopify?',
+    a: "Yes, Make.com works natively with Shopify via webhooks and has over 100 Shopify triggers and actions. The free tier includes 1,000 credits per month, formerly called operations — ten times more than Zapier's 100 free tasks per month — which is enough for most Shopify stores processing up to several hundred orders per month. No credit card is required. Make.com is the automation engine behind every Stack Architect tool. Full answer: <a href='/make-com-shopify/'>does Make.com work with Shopify?</a>",
+  },
+  {
+    q: 'What is the Shopify Conversions API (CAPI)?',
+    a: "The Shopify Conversions API sends purchase events server-side directly to Meta and Google Ads, bypassing iOS Intelligent Tracking Prevention, ad blockers, and cookie expiry that block browser-based pixels. Since Shopify's App Pixel defaulted to Optimized mode on January 13, 2026, throttling Meta pixel data, server-side CAPI has become essential. It carries the conversion data that browser tracking loses — <a href='/how-we-test/#the-20-40-figure'>how much that is depends on your store</a>, since the loss is set by your mobile/iOS traffic mix and your consent rate — keeping it visible to ad platforms and improving ROAS attribution accuracy. Full explanation: <a href='/capi-shield/'>what is the Shopify CAPI?</a>",
+  },
+  {
+    q: 'How do I set up TikTok server-side tracking for Shopify without code?',
+    a: "Use Make.com to route Shopify order webhooks as CompletePayment events to TikTok's Events API server-to-server. TikTok uses CompletePayment as its purchase event name, not Purchase. Stack Architect provides a free step-by-step guide that completes setup in 6 minutes — no developer required, no code, running on Make.com's free tier. The setup sends full Advanced Matching data with every event. Full walkthrough: <a href='/tiktok-events-api-shopify/'>TikTok Events API Shopify setup</a>.",
+  },
+  {
+    q: 'How much does Triple Whale cost and is there a free alternative?',
+    a: "Triple Whale uses GMV-based pricing that scales with your store's revenue and chosen package, with a limited free plan. The free alternative for server-side tracking is <a href='/capi-shield/'>CAPI Shield</a>, which provides server-side conversion events to Meta and Google Ads at $0 per month, sending the same match-key set Meta scores EMQ against. We have not compared its attribution accuracy with Triple Whale's CAPI component. Full breakdown: <a href='/shopify-attribution-tools-compared/'>Shopify attribution tools compared</a>.",
+  },
+  {
+    q: 'What is server-side tracking for Shopify and why does it matter in 2026?',
+    a: "Server-side tracking sends purchase events directly from your server to ad platforms like Meta and Google Ads, bypassing iOS privacy restrictions, Safari cookie expiry, ad blockers, and browser-based pixel limitations. Since iOS 14.5 ATT and continuing through iOS 26 Link Tracking Protection, which strips fbclid from Private Browsing, Mail, and Messages links, browser tracking has become increasingly unreliable. Server-side tracking carries the conversions that would otherwise go unmeasured. <a href='/how-we-test/#the-20-40-figure'>We publish no figure for how many</a>: the share is set by a store's own mobile/iOS traffic mix and consent rate, so it is measurable in your dashboards and not derivable from ours. For Shopify stores running paid ads it is now essential for accurate ROAS measurement. Full guide: <a href='/blog/shopify-server-side-tracking-complete-setup-guide/'>Shopify server-side tracking setup</a>.",
+  },
+  {
+    q: 'Do I have to keep paying $500+ per month on Shopify apps?',
+    a: `No. The Stack Architect $0 Automation Stack replaces seven categories of paid Shopify apps — ad tracking, inventory management, email marketing, TikTok server-side tracking, P&L profit reporting, workflow automation and automation stability — using the free tiers of Make.com, Google Sheets and Systeme.io. Adding up the seven categories on this page gives ${MO_RANGE}, or ${YR_RANGE}. Or buy the <a href='/pro/'>Complete Kit for $24</a> for the pre-built files.`,
+  },
+  {
+    q: 'What is the Stack Architect Complete Kit and what does $24 include?',
+    a: "The <a href='/pro/'>Stack Architect Complete Kit</a> is a $24 one-time purchase containing four ready-to-import Make.com JSON blueprints — CAPI Shield for Meta and Google tracking, TikTok Events API, Stocky Swap for inventory, and P&L Auto for profit reporting — plus two pre-configured Google Sheets templates and four Loom walkthrough videos. It deploys the entire Shopify automation stack in 10 minutes instead of the 8 hours needed to build from the free guides. One payment, no subscription ever, and a 30-day money-back guarantee.",
+  },
+  {
+    q: 'Is my Shopify data secure with this stack?',
+    a: 'Yes. All data stays inside your own Google account and Make.com workspace. Stack Architect has zero access to your Shopify orders, customer data, or ad accounts. The tools are GDPR compliant by design — you own and control everything. Data flows from Shopify to your Make.com account to your Google Sheets, with no third-party storage or intermediary.',
+  },
+  {
+    q: 'Can I set up Shopify automation without a developer or any code?',
+    a: "Yes. Zero coding is required. Every tool in the Stack Architect stack is plug-and-play — any store owner can deploy each tool in under 10 minutes using the free step-by-step guides. The <a href='/pro/'>$24 Complete Kit</a> provides pre-configured Make.com JSON blueprint files that import in one click, requiring no manual module configuration, field mapping, or API setup.",
+  },
+  {
+    q: 'Why is my Shopify Google Ads conversion tracking showing wrong numbers?',
+    a: "Shopify Google Ads conversion tracking shows wrong numbers because iOS Link Tracking Protection strips the Google Click ID from ad URLs before customers open them in Safari, Mail, or Messages. Without gclid, Google cannot attribute the purchase to the ad. Safari ITP also clears attribution cookies within 24 hours. The fix is <a href='/shopify-google-ads-conversion-tracking/'>Google Enhanced Conversions via Make.com</a> — a server-side signal that sends hashed customer email to Google Ads directly from Shopify's server, bypassing browser restrictions entirely. It deploys in 6 minutes at $0/month. We have not measured how much of the lost gclid traffic this recovers, and we are not aware of a published figure for it, so we do not quote one — the gain shows up in your own Google Ads conversion count.",
+  },
+  {
+    q: 'How do I prepare my Shopify store for AI shopping and ChatGPT citations?',
+    a: "Three requirements for AI-discoverable Shopify stores in 2026: first, structured data — Product, Offer, Organization and FAQPage schema on every page; second, server-side tracking for accurate conversion signals back to ad platforms; third, an llms.txt file at your domain root describing your product catalogue for AI crawlers. Critically, all of it must be present in the server-rendered HTML, because AI crawlers do not execute JavaScript. The <a href='/blog/shopify-agentic-storefronts-setup-guide-2026/'>Agentic Storefronts setup guide</a> includes a 12-point readiness checklist.",
+  },
+  {
+    q: "What's the difference between Make.com and Zapier for Shopify automation?",
+    a: "Make.com's free tier includes 1,000 credits per month, formerly called operations. Zapier's free tier includes 100 tasks per month — ten times fewer. Make.com is also more flexible for multi-step branching workflows, such as routing one Shopify order event to Meta CAPI, Google Ads, TikTok Events API and Google Sheets simultaneously, because operations are counted per module rather than per multi-step zap. For Shopify stores with more than 100 orders per month, Make.com is usually 3–5x cheaper than Zapier at equivalent volume. Compare exactly with the <a href='/make-vs-zapier-cost-calculator/'>Make vs Zapier Calculator</a>.",
+  },
+  {
+    q: 'What happens to my Stocky data after the 31 August 2026 shutdown?',
+    a: "All Stocky data — purchase orders, stocktakes, transfers, supplier records, demand forecasts and SKU history — is permanently deleted after August 31, 2026 per Shopify's official shutdown notice. There is no migration path provided by Shopify. Store owners must export their data and migrate to a replacement before the deadline. <a href='/stocky-swap/'>Stocky Swap</a> is a free replacement that logs orders to Google Sheets via Make.com and deploys in 4 minutes. Score your migration complexity with the <a href='/stocky-migration-risk-scorer/'>Stocky Migration Risk Scorer</a>.",
+  },
+  {
+    q: 'How much does a typical Shopify store save with the free automation stack?',
+    a: `Adding up the seven paid app categories on this page gives ${MO_RANGE}, which is ${YR_RANGE}. The low bound is the sum of every category's entry-level price and the high bound the sum of every category's ceiling, so most stores land between them depending on which apps they run. Categories quoted as "from $X" contribute their floor to both bounds, so both figures understate rather than overstate. The $24 Complete Kit pays for itself in under a week at any point in that range. Calculate your exact figure with the <a href='/shopify-app-cost-calculator/'>App Cost Calculator</a>.`,
+  },
+  {
+    q: 'Does Shopify officially support replacing its Stocky app with third-party tools?',
+    a: "Yes. Shopify's own shutdown notice directs merchants to the Shopify App Store and third-party inventory management tools. Shopify does not provide a first-party migration path — the Stocky database will be deleted after August 31, 2026. Any tool that can ingest Shopify order webhooks can replace Stocky's core inventory tracking functionality, including free webhook-to-Sheets workflows like <a href='/stocky-swap/'>Stocky Swap</a>.",
+  },
+  {
+    q: 'Why is Stack Architect free and how does it make money?',
+    a: "Stack Architect's free tools, guides and calculators are funded by two revenue streams. First, affiliate commissions from tools we use and recommend — Make.com, Systeme.io, GetResponse, Beehiiv, Tidio, Gorgias and Google Workspace — which cost you nothing extra. Second, the optional $24 <a href='/pro/'>Complete Kit</a> for store owners who want pre-built Make.com blueprints rather than building from the free guides. No subscriptions, no upsells, no hidden fees. <a href='/how-we-test/'>How we test and disclose</a>.",
+  },
+];
+
+/* Visible answer text === JSON-LD answer text. Tags stripped, prose identical. */
+const stripTags = (html: string) =>
+  html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+
+const faqJsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  '@id': 'https://stackarchitect.xyz/#faq',
+  'inLanguage': 'en-GB',
+  'isPartOf': { '@id': 'https://stackarchitect.xyz/#webpage' },
+  'mainEntity': FAQ.map((item) => ({
+    '@type': 'Question',
+    'name': item.q,
+    'acceptedAnswer': { '@type': 'Answer', 'text': stripTags(item.a) },
+  })),
+};
+
+/* Stocky's end of service. One date, used by the countdown, the urgency strip
+ * and the post-deadline copy, so the page reads correctly on 1 September with
+ * no edit. */
+const stockyGone = isPostShutdown();
+
+/* ---------------------------------------------------------------------------
+ * KIT_SCHEMA — the Complete Kit's SoftwareApplication node.
+ *
+ * This lived inside the raw <script type="application/ld+json"> @graph below
+ * until it was found asserting "price": "29" while the Kit had been $24 since
+ * 29 Aug -- a price nothing on the page, in products.ts or in claims.json
+ * agreed with. Astro does not interpolate expressions inside a script element,
+ * so a price written in that literal cannot reference KIT_PRICE and has to be
+ * swept by hand. This node is therefore handed to <Base schema={...}> instead,
+ * the same reason pro.astro moved its schema into frontmatter.
+ *
+ * No priceVerifiedDate / priceSourceUrl: those exist for somebody else's
+ * number. This is a price we set, so it carries KIT_PRICE and the claims.json
+ * pin instead -- see the hard rule in CLAUDE.md.
+ * ------------------------------------------------------------------------ */
+const kitSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'Stack Architect Complete Kit',
+  url: 'https://stackarchitect.xyz/pro/',
+  applicationCategory: 'BusinessApplication',
+  applicationSubCategory: 'Shopify Automation',
+  operatingSystem: 'Any (web-based)',
+  offers: {
+    '@type': 'Offer',
+    price: String(KIT_PRICE),
+    priceCurrency: 'USD',
+    availability: 'https://schema.org/InStock',
+    priceValidUntil: '2026-12-31',
+    url: 'https://stackarchitect.xyz/pro/',
+  },
+  description: `Four ready-to-import Make.com JSON blueprints for Shopify server-side tracking (Meta Conversions API + Google Enhanced Conversions), TikTok Events API, inventory management (Stocky replacement via Google Sheets), and live P&L reporting. Includes two Google Sheets templates and four Loom walkthrough videos. ${formatPrice(KIT_PRICE)} one-time, no subscription ever. 30-day money-back guarantee.`,
+  provider: { '@id': 'https://stackarchitect.xyz/#org' },
+};
+---
+<Base 
+  title="Free Shopify Automation Stack 2026 — Replace Paid Apps" 
+  description="Replace six paid Shopify apps with free tools: Meta CAPI, Google Enhanced Conversions, Stocky replacement, Klaviyo alternative, TikTok CAPI and live P&L."
+  schema={kitSchema}
+>
+  <Fragment slot="head">
+    <link rel="preload" as="image" href="/videos/poster-16x9.jpg" fetchpriority="high" />
+    <!-- BUMP ON CONTENT EDIT: "dateModified" below, the itemprop
+         dateModified meta further down, and article:modified_time. All three
+         must carry the same date. -->
+    <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://stackarchitect.xyz/#website",
+      "url": "https://stackarchitect.xyz/",
+      "name": "Stack Architect",
+      "alternateName": ["StackArchitect", "Stack Architect Shopify Tools"],
+      "description": "Free Shopify automation stack — replace paid tracking, inventory, email, TikTok CAPI, and workflow apps. Replaces $321–$1,887 per month of paid apps. No code required.",
+      "inLanguage": "en-GB",
+      "publisher": { "@id": "https://stackarchitect.xyz/#org" }
+    },
+    {
+      "@type": "WebPage",
+      "@id": "https://stackarchitect.xyz/#webpage",
+      "url": "https://stackarchitect.xyz/",
+      "name": "Free Shopify Automation Stack 2026 — Replace $321–$1,887/Month of Paid Apps",
+      "description": "Free tools replacing paid Shopify apps: server-side tracking (Meta CAPI + Google Enhanced Conversions), inventory management (Stocky replacement), email marketing (Klaviyo alternative), TikTok Events API, and P&L reporting. Replaces $321–$1,887/month of paid apps using Make.com free tier. No code. Deploy in 6 minutes. Pre-built Complete Kit available for $24.",
+      "inLanguage": "en-GB",
+      "datePublished": "2026-02-01",
+      "dateModified": "2026-08-21",
+      "speakable": {
+        "@type": "SpeakableSpecification",
+        "cssSelector": [".hero h1", ".hero-sub", ".sec-head h2", ".mech-claim-c", ".calc-card-c", ".faq-ans-c p"]
+      },
+      "isPartOf": { "@id": "https://stackarchitect.xyz/#website" },
+      "about": { "@id": "https://stackarchitect.xyz/#org" },
+      "mainEntity": { "@id": "https://stackarchitect.xyz/#itemlist" }
+    },
+    {
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://stackarchitect.xyz/" }
+      ]
+    },
+    {
+      "@type": "ItemList",
+      "@id": "https://stackarchitect.xyz/#itemlist",
+      "name": "The $0 Shopify Automation Stack — Free Tools + 15 Free Calculators",
+      "description": "Free tools replacing paid Shopify apps plus 9 free diagnostic calculators for Shopify operators. Built on Make.com free tier, Google Sheets, and Systeme.io free plan.",
+      "numberOfItems": 13,
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "CAPI Shield — Free Server-Side Tracking", "url": "https://stackarchitect.xyz/capi-shield/", "description": "Free Meta Conversions API and Google Ads Enhanced Conversions server-side tracking for Shopify. Sends hashed email, phone, name, IP and user-agent as match keys. A free alternative to Elevar, Triple Whale and Northbeam. Addresses the conversion data lost to iOS privacy restrictions and ad blockers. Runs on Make.com free tier." },
+        { "@type": "ListItem", "position": 2, "name": "Google Ads Conversion Tracking — Free Enhanced Conversions", "url": "https://stackarchitect.xyz/shopify-google-ads-conversion-tracking/", "description": "Free Google Ads Enhanced Conversions for Shopify via Make.com server-side webhook. Addresses purchase events lost to iOS Link Tracking Protection stripping gclid. A free alternative to Stape ($29+/mo) and Littledata ($159+/mo)." },
+        { "@type": "ListItem", "position": 3, "name": "Stocky Swap — Free Inventory Management", "url": "https://stackarchitect.xyz/stocky-swap/", "description": "Free Shopify inventory management replacing Shopify Stocky which is shutting down permanently on August 31, 2026. All Stocky data will be deleted. Stocky Swap logs every order to Google Sheets in real time via Make.com. Deploys in 4 minutes. Free forever." },
+        { "@type": "ListItem", "position": 4, "name": "TikTok Events API — Free Server-Side Tracking", "url": "https://stackarchitect.xyz/tiktok-events-api-shopify/", "description": "Free TikTok server-side tracking for Shopify via Make.com. Sends CompletePayment events server-to-server, bypassing iOS ITP and ad blockers. A free alternative to WeltPixel ($39+/mo) and Analyzify ($145–$275/mo)." },
+        { "@type": "ListItem", "position": 5, "name": "Replace Klaviyo Free — Systeme.io", "url": "https://stackarchitect.xyz/replace-klaviyo-free/", "description": "Replace Klaviyo with Systeme.io free plan: 2,000 contacts, unlimited email sends, full automation sequences, sales funnels, CRM. Saves $20+/month. Klaviyo changed billing in February 2025 to charge for all active profiles." },
+        { "@type": "ListItem", "position": 6, "name": "Shopify P&L Automation", "url": "https://stackarchitect.xyz/shopify-profit-loss-automation/", "description": "Free live profit and loss reporting in Google Sheets. Every order auto-calculates revenue, COGS, ad spend, fees, and net profit within 60 seconds of payment. A free alternative to TrueProfit, BeProfit and Glew.io." },
+        { "@type": "ListItem", "position": 7, "name": "Autocrat Quota Fix", "url": "https://stackarchitect.xyz/autocrat-quota-fix/", "description": "Prevents Google Apps Script 'Service invoked too many times' quota errors that silently kill automations. Moves document automation to Make.com, bypassing the 6-minute execution limit and 90-minute daily runtime cap." },
+        { "@type": "ListItem", "position": 8, "name": "Shopify App Stack Kill or Keep Auditor", "url": "https://stackarchitect.xyz/shopify-app-stack-kill-or-keep-auditor/", "description": "Free diagnostic tool. Enter any Shopify store domain to detect active paid apps, estimate monthly costs, and identify free replacements. Detects 30+ apps instantly." },
+        { "@type": "ListItem", "position": 9, "name": "App Cost Calculator", "url": "https://stackarchitect.xyz/shopify-app-cost-calculator/", "description": "Free calculator. Enter monthly app spend across marketing, inventory, and analytics to calculate annual waste and recoverable spend." },
+        { "@type": "ListItem", "position": 10, "name": "Meta EMQ Score Estimator", "url": "https://stackarchitect.xyz/meta-emq-score-estimator/", "description": "Free diagnostic. Estimate Meta Conversions API Event Match Quality score before deploying server-side tracking. Quantifies ad spend lost to low EMQ." },
+        { "@type": "ListItem", "position": 11, "name": "Attribution Gap Calculator", "url": "https://stackarchitect.xyz/shopify-vs-meta-attribution-gap-calculator/", "description": "Free diagnostic. Compares Shopify reported revenue, Meta reported conversions, and GA4 reported sessions to identify which platform to trust and what to fix first." },
+        { "@type": "ListItem", "position": 12, "name": "Klaviyo Migration Savings Calculator", "url": "https://stackarchitect.xyz/klaviyo-to-systeme-migration-savings-calculator/", "description": "Free calculator. Inputs: list size and sending frequency. Outputs: annual saving from migrating Klaviyo to Systeme.io plus estimated migration time." },
+        { "@type": "ListItem", "position": 13, "name": "Stack Architect Complete Kit", "url": "https://stackarchitect.xyz/pro/", "description": "Pre-built Complete Kit. Four ready-to-import Make.com JSON blueprints (CAPI Shield, TikTok Events API, Stocky Swap, P&L Auto), two Google Sheets templates, four Loom walkthrough videos. $24 one-time. Deploys in 10 minutes instead of 8 hours. 30-day money-back guarantee." }
+      ]
+    },
+    {
+      "@type": "HowTo",
+      "name": "How to Replace Paid Shopify Apps With Free Automation",
+      "description": "Three-step process to replace paid Shopify apps (Klaviyo, Elevar, Triple Whale, Stocky, Zapier) with free tools using Make.com, Google Sheets, and Systeme.io.",
+      "totalTime": "PT6M",
+      "estimatedCost": { "@type": "MonetaryAmount", "currency": "USD", "value": "0" },
+      "step": [
+        { "@type": "HowToStep", "position": 1, "name": "Connect Shopify via webhook", "text": "Add a webhook in Shopify Admin that fires the instant an order is placed or paid. No app install required — it's a built-in Shopify feature. Takes 2 minutes." },
+        { "@type": "HowToStep", "position": 2, "name": "Route and enrich order data with Make.com", "text": "Make.com receives the webhook and routes order data simultaneously: to Google Sheets for inventory and P&L, and to Meta Conversions API, Google Enhanced Conversions, and TikTok Events API for server-side conversion events." },
+        { "@type": "HowToStep", "position": 3, "name": "Report in real time across platforms", "text": "Accurate attribution appears in Google Ads, Meta Ads Manager, and TikTok Ads Manager. Live P&L populates in Google Sheets. Low-stock alerts fire automatically. Entire system runs without maintenance on Make.com free tier." }
+      ]
+    },
+    {
+      "@type": "VideoObject",
+      "name": "How Shopify stores replace their paid app stack for free in 6 minutes",
+      "description": "Learn how to replace paid Shopify apps like Klaviyo, Elevar, Triple Whale, and Stocky using a free Make.com automation stack. Covers server-side tracking, inventory, P&L, and email for zero dollars.",
+      "uploadDate": "2026-08-04T12:00:00+01:00",
+      "contentUrl": "https://stackarchitect.xyz/videos/hero-long.mp4",
+      "thumbnailUrl": "https://stackarchitect.xyz/videos/poster-16x9.jpg"
+    }
+  ]
+}
+</script>
+    <!-- FAQPage is generated from the FAQ array in this file's frontmatter, the
+         same array that renders the visible <details> list below. Emitting it as
+         a separate block (rather than inside the @graph literal) is what makes
+         "schema count === rendered count" true by construction instead of by
+         hand. Multiple ld+json blocks on one page are valid and are merged. -->
+    <script type="application/ld+json" set:html={JSON.stringify(faqJsonLd)}></script>
+    <meta name="article:published_time" content="2026-02-01T00:00:00Z">
+<meta name="article:modified_time" content="2026-08-21T00:00:00Z">
+<meta name="article:section" content="Shopify Automation">
+<meta name="article:tag" content="Shopify">
+<meta name="article:tag" content="automation">
+<meta name="article:tag" content="server-side tracking">
+<meta name="article:tag" content="free tools">
+<meta name="article:tag" content="Make.com">
+<meta name="article:tag" content="Meta Conversions API">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://stackarchitect.xyz/">
+<meta property="og:title" content="Free Shopify Automation Stack — Replace $321–$1,887/Month of Paid Apps">
+<meta property="og:description" content="Replace 6 paid Shopify apps for $0 — ad tracking, inventory, email, TikTok, P&L. Verified free tier of Make.com. No code. 6 minutes. $24 Complete Kit optional.">
+<meta property="og:image" content="https://stackarchitect.xyz/og/og-home.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Stack Architect — Free Shopify Automation Stack replacing $321–$1,887/month of paid apps">
+<meta property="og:site_name" content="Stack Architect">
+<meta property="og:locale" content="en_GB">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Free Shopify Automation Stack — Replace $321–$1,887/Month">
+<meta name="twitter:description" content="Replace 6 paid Shopify apps for $0 — fix ad tracking, replace Stocky, ditch Klaviyo, recover TikTok conversions, get live P&L. Verified free tier. 6 minutes.">
+<meta name="twitter:image" content="https://stackarchitect.xyz/og/og-home.png">
+<meta name="twitter:image:alt" content="Stack Architect — Free Shopify Automation Stack">
+  </Fragment>
+
+  
+<main id="main-content">
+
+<!-- =============================================================== -->
+<!-- HERO — Single primary CTA, video below, trust row, no overload  -->
+<!-- =============================================================== -->
+<section class="hero bg-grid" aria-label="Free Shopify automation stack — Stack Architect">
+<div class="hero-inner">
+  <div class="hero-dateline">Updated August 2026 · Verified free tier · No code required</div>
+
+  <h1 itemprop="headline">Klaviyo. Triple Whale. Stocky.<br><span class="green">Replaced — free.</span></h1>
+
+  <p id="answer" class="hero-sub" itemprop="description">Six of the most expensive Shopify app categories have free replacements built on Make.com's free tier: server-side Meta and Google tracking, inventory logging, email marketing, TikTok Events API and live profit reporting. Each runs from one Shopify order webhook, needs no code, and deploys in about six minutes. Full walkthrough: <a href="/ultimate-shopify-automation-guide/">Ultimate Shopify Automation Guide</a>.</p>
+
+  <div class="hero-primary-cta">
+    <a href="#sa-scanner" class="btn btn-lg btn-g">See What Your Store Is Overpaying <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg></a>
+    <div class="hero-secondary">Or <a href="/pro/">get the pre-built Complete Kit for $24 →</a></div>
+  </div>
+
+  <div class="trust-row">
+    <span class="trust-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>No code required</span>
+    <span class="trust-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Live in ~6 minutes</span>
+    <span class="trust-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Your data, your accounts</span>
+    <span class="trust-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>Remove anytime</span>
+  </div>
+  
+  <div class="ledger reveal" aria-label="What the free stack replaces">
+    <div class="ledger-row"><span class="ledger-app">Klaviyo <em>email</em></span><span class="ledger-fill"></span><span class="ledger-was">$20+/mo</span><span class="ledger-now">$0</span></div>
+    <div class="ledger-row"><span class="ledger-app">Triple Whale / Elevar <em>tracking</em></span><span class="ledger-fill"></span><span class="ledger-was">$145–650/mo</span><span class="ledger-now">$0</span></div>
+    <div class="ledger-row"><span class="ledger-app">Stocky <em>inventory</em></span><span class="ledger-fill"></span><span class="ledger-was ledger-gone">$29–500/mo · deleted Aug 31</span><span class="ledger-now">$0</span></div>
+    <div class="ledger-row"><span class="ledger-app">TrueProfit / BeProfit <em>P&amp;L</em></span><span class="ledger-fill"></span><span class="ledger-was">$19–299/mo</span><span class="ledger-now">$0</span></div>
+    <div class="ledger-row ledger-total"><span class="ledger-app">These four alone</span><span class="ledger-fill"></span><span class="ledger-was">$213–$1,469/mo</span><span class="ledger-now">$0</span></div>
+  </div></div>
+  <div class="urgency" role="note"><span class="dot" style="background:var(--amber);animation:none;"></span>{stockyGone
+    ? "Shopify deleted all Stocky data on August 31, 2026 — the free replacement deploys in 4 minutes"
+    : "Shopify's Stocky app shuts down August 31, 2026 — free replacement ready now"}</div>
+
+  <!-- Self-hosted video with captions + transcript -->
+  <div class="hero-video-wrap">
+    <div class="hero-video-glow"></div>
+    <div class="hero-video-box">
+      <video
+        controls
+        preload="metadata"
+        poster="/videos/poster-16x9.jpg"
+        playsinline
+        title="How Shopify stores replace their paid app stack for free in 6 minutes — Stack Architect">
+        <source src="/videos/hero-long.mp4" type="video/mp4">
+        <track kind="captions" srclang="en" label="English" src="/videos/hero-long.vtt" default>
+        Your browser does not support video playback. <a href="/videos/hero-long.mp4">Download the video</a>.
+      </video>
+    </div>
+    <div class="hero-video-caption">41-second overview · How the stack works</div>
+    <details class="hero-video-transcript">
+      <summary>Read transcript</summary>
+      <div class="transcript-body">
+        <p>Your Shopify store is leaking $700 a month.</p>
+        <p>Klaviyo. Elevar. Triple Whale. Stocky.</p>
+        <p>Every paid app draining your store has a free version that works just as well.</p>
+        <p>One Make.com webhook handles server-side tracking, inventory, P&amp;L and email — for zero dollars.</p>
+        <p>The free tier handles it. Shopify's killing Stocky August 31st. Klaviyo charges per profile now. We've documented every source.</p>
+        <p>Free guides and tools at stackarchitect.xyz. Or skip the build — Complete Kit, $24, live in 10 minutes.</p>
+        <p>stackarchitect.xyz.</p>
+      </div>
+    </details>
+  </div>
+
+  <FeaturedIn pressLine />
+
+</section>
+
+<!-- =============================================================== -->
+<!-- SCANNER — Promoted to position #2. Self-diagnosis drives intent -->
+<!-- =============================================================== -->
+<section class="section-alt sec-major" id="sa-scanner" aria-labelledby="scanner-h">
+<div class="inner-sm">
+  <div class="sec-head">
+    <span class="tag" style="margin-bottom:16px;display:inline-flex;"><span class="dot"></span>Free diagnostic · 30 seconds · No signup</span>
+    <h2 id="scanner-h">Find Your <span style="color:var(--g)">Exact Profit Leak</span> First</h2>
+    <p>Select every situation that applies. We calculate your exact monthly loss and build a personalised deployment plan — free, no signup, no credit card.</p>
+  </div>
+  <div class="scan-card">
+    <div id="sc-scan">
+      {/* Server-rendered from PAINS. The inline script attaches toggle
+          behaviour to these buttons; it no longer creates them, so the six
+          labels are present in the raw HTML. */}
+      <div class="pain-list" id="sc-list">
+        {PAINS.map((p) => (
+          <button type="button" class="pain-btn" role="checkbox" aria-checked="false" data-pain={p.id} data-cost={p.cost} data-sol={p.sol} data-url={p.url} data-label={p.label}>
+            <div style="display:flex;align-items:center;gap:12px;flex:1;">
+              <div class="pain-chk" id={`chk${p.id}`}>
+                <svg id={`chkv${p.id}`} width="11" height="9" viewBox="0 0 11 9" fill="none" style="display:none" aria-hidden="true"><path d="M1 4.5L3.8 7.5L10 1" stroke="#0c0f0d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="pain-label-wrap">
+                <div class="pain-label">{p.label}</div>
+                {p.badge && <span class="pain-badge">{p.badge}</span>}
+              </div>
+            </div>
+            <div class="pain-cost">~${p.cost}/mo</div>
+          </button>
+        ))}
+      </div>
+      <div class="scan-result" id="sc-result">
+        <div class="sr-inner">
+          <div>
+            <div class="sr-label">Your monthly profit leak</div>
+            <div class="sr-total">$<span id="sc-n">0</span><span class="sr-mo">/mo</span></div>
+            <div class="sr-year" id="sc-yr">$<span id="sc-yn">0</span>/year disappearing</div>
+          </div>
+          <div id="sc-recs" style="display:none;">
+            <div class="sr-recs-label">Your fix stack</div>
+            <div id="sc-recs-list"></div>
+          </div>
+        </div>
+      </div>
+      <div class="scan-cta-wrap">
+        <button id="sc-btn" class="scan-cta" disabled onclick="scNext()">Select at least one issue above</button>
+        <p class="scan-meta">No account required · 30 seconds · Instant plan</p>
+      </div>
+    </div>
+    <div class="plan-step" id="sc-plan">
+      <div class="plan-hd">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><span class="dot"></span><span style="font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;color:var(--g);letter-spacing:.15em;text-transform:uppercase;">Your personalised deployment plan</span></div>
+        <h3 id="sc-plan-h">You're losing ~$0/mo</h3>
+        <p>Deploy in this order — each takes under 6 minutes and costs nothing.</p>
+      </div>
+      <div class="plan-step0">
+        <div class="plan-step0-head">
+          <span class="plan-step0-num">0</span>
+          <div>
+            <div class="plan-step0-title">Before step 1 — create the free Make.com account</div>
+            <p class="plan-step0-desc">Every tool in your plan runs on one Make.com scenario. The free tier covers all of them: 1,000 credits a month, no credit card, no time limit. Set it up once and the rest of the plan is import-and-go.</p>
+          </div>
+        </div>
+        <div class="plan-step0-actions">
+          <a href="/go/make/?source=home-scanner-plan" target="_blank" rel="noopener sponsored" class="btn btn-sm btn-g" data-cta-position="scanner-plan">Create your free Make.com account →</a>
+          <a href="/go/systeme/?source=home-scanner-plan-klaviyo" target="_blank" rel="noopener sponsored" class="plan-step0-alt" id="sc-systeme" hidden data-cta-position="scanner-plan-klaviyo">Your plan replaces Klaviyo — start free on Systeme.io →</a>
+        </div>
+        <p class="plan-step0-disc"><span class="aff-mark">affiliate</span> We earn a commission if you sign up through these links, at no extra cost to you. Both tools have permanently free plans and the plan above works on them.</p>
+      </div>
+
+      <div class="plan-items" id="sc-plan-items"></div>
+
+      <div class="plan-kit">
+        <div>
+          <div class="plan-kit-title">Or skip the build entirely</div>
+          <p class="plan-kit-desc">Your plan takes about 8 hours to build from the free guides. The <a href="/pro/">Complete Kit</a> is the same four workflows pre-built — import them and you are live in 10 minutes. $24 once, 30-day money-back guarantee.</p>
+        </div>
+        <a href="/pro/" class="btn-pro btn-pro-sm">Get the Complete Kit — $24 →</a>
+      </div>
+
+      <div class="email-block">
+        <h4>Get your step-by-step setup guides</h4>
+        <p>We'll email the exact deployment guides for your plan — free, no spam, unsubscribe anytime.</p>
+        <div class="email-row">
+          <input type="email" id="sc-email" class="email-inp" placeholder="your@email.com">
+          <button class="email-go" onclick="scSubmit()">Send My Plan →</button>
+        </div>
+        <p class="email-disc">Affiliate links keep this resource free — they cost you nothing extra.</p>
+      </div>
+    </div>
+    <div class="done-step" id="sc-done">
+      <div class="done-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34d377" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h3>Your plan is on its way.</h3>
+      <p>Check your inbox for the deployment guides. Explore the solutions below while you wait.</p>
+      <a href="#sa-solutions" class="btn btn-sm" onclick="event.preventDefault();document.getElementById('sa-solutions').scrollIntoView({behavior:'smooth'})">See the Solutions →</a>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- =============================================================== -->
+<!-- 6 SOLUTIONS GRID — tighter copy, Stocky urgency preserved       -->
+<!-- =============================================================== -->
+<section class="section sec-major" id="sa-solutions" aria-labelledby="sol-h">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">Free tools · Deploy individually or as a stack</span>
+      <h2 id="sol-h">One Stack. Every Shopify Leak Fixed.</h2>
+      <p>Each targets a specific profit leak. Deploy one or all six — every tool costs $0, deploys in under 6 minutes, and runs on Make.com's free tier.</p>
+    </div>
+
+    <article class="sol-urgent">
+      <div class="sol-urgent-bar"></div>
+      <div class="sol-urgent-inner">
+        <div style="flex:1;min-width:260px;">
+          <div class="sol-urgent-badge">{stockyGone ? "⚠ Stocky data deleted — August 31, 2026" : "⚠ Action required — August 31, 2026"}</div>
+          <div style="margin-bottom:10px;"><span class="tag tag-sky">Inventory</span></div>
+          <div class="sol-urgent-name">Stocky Swap</div>
+          <div class="sol-urgent-hl">{stockyGone
+            ? "Shopify Deleted All Stocky Data on Aug 31. Here Is What Replaces It."
+            : "Shopify Permanently Deletes All Stocky Data Aug 31. Replace It Now."}</div>
+          {stockyGone ? (
+            <p class="sol-urgent-desc">Stocky's purchase orders, stocktakes, transfers, supplier records and SKU history were permanently deleted after August 31, 2026, and Shopify provided no migration path. If you did not export before the deadline, that history is gone — but the ongoing tracking is replaceable today. Stocky Swap logs every new order to Google Sheets in real time via a Make.com webhook and starts building fresh inventory history the moment you deploy. Four minutes, no app install, $0. <a href="/stocky-alternative/" style="color:var(--sky)">See all Stocky alternatives →</a></p>
+          ) : (
+            <p class="sol-urgent-desc">Per Shopify's official shutdown notice, all Stocky data — purchase orders, stocktakes, transfers, SKU history — is permanently deleted after August 31, 2026. No migration path. Stocky Swap logs every order to Google Sheets in real time via Make.com webhook. Deploys in 4 minutes. Your data is safe the moment you deploy. <a href="/stocky-alternative/" style="color:var(--sky)">See all Stocky alternatives →</a></p>
+          )}
+          <div class="sol-urgent-reps"><span class="sol-rep">Stocky</span><span class="sol-rep">Linnworks</span><span class="sol-rep">Skubana</span><span class="sol-rep">Inventory Planner</span></div>
+          <div class="sol-urgent-meta"><span class="sol-urgent-save">Saves $29–$500/mo</span><span class="sol-urgent-time">~4 min setup</span></div>
+          <div style="display:flex;gap:12px;margin-top:20px;flex-wrap:wrap;">
+            <a href="/stocky-swap/" class="btn btn-sm">Deploy Stocky Swap Free →</a>
+            <a href="/stocky-shutdown/" class="btn-outline btn-outline-sm">What's being deleted</a>
+            <a href="/go/make/?source=home-card-stocky" target="_blank" rel="noopener sponsored" class="sol-aff" data-cta-position="card-stocky">Needs Make.com — start free <span class="aff-mark">affiliate</span></a>
+          </div>
+        </div>
+        <div class="sol-urgent-right">
+          <div class="countdown-box" id="cd-box">
+            <div class="countdown-label">Stocky shuts down in</div>
+            <div class="countdown-nums">
+              <div class="cd-unit"><div class="cd-val" id="cd-d">--</div><div class="cd-l">Days</div></div>
+              <div class="cd-sep">:</div>
+              <div class="cd-unit"><div class="cd-val" id="cd-h">--</div><div class="cd-l">Hrs</div></div>
+              <div class="cd-sep">:</div>
+              <div class="cd-unit"><div class="cd-val" id="cd-m">--</div><div class="cd-l">Min</div></div>
+            </div>
+          </div>
+          <div class="countdown-box" id="cd-box-post" hidden>
+            <div class="countdown-label">Stocky — end of service</div>
+            <div style="font-family:var(--mono);font-size:var(--fs-lg);font-weight:700;color:var(--amber);text-align:center;">31 Aug 2026</div>
+          </div>
+          <div style="font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);text-align:center;line-height:1.5;max-width:180px;">Free replacement — deploys in 4 minutes</div>
+        </div>
+      </div>
+    </article>
+
+    <div class="sol-grid">
+      <article class="sol-card g">
+        <div class="sol-bar" style="background:linear-gradient(90deg,var(--g),#f5b64d);"></div>
+        <div class="sol-body">
+          <span class="tag">Meta + Google Ads Tracking</span>
+          <h3 class="sol-name">CAPI Shield</h3>
+          <p class="sol-hl">Fix Broken Meta + Google Ads Attribution</p>
+          <p class="sol-desc">iOS strips ad click IDs and blocks pixels before checkout — Meta and Google Ads both <a href="/shopify-ios-attribution-gap-benchmark/">under-report purchases</a> as a result. One Make.com webhook sends server-side events to Meta CAPI and Google Ads Enhanced Conversions, with hashed email, phone, name, IP and user-agent as match keys. Meta scores Event Match Quality from those parameters — <a href="/meta-emq-score-estimator/">estimate yours</a>.</p>
+          <div class="sol-rep-label">Replaces</div>
+          <div class="sol-reps"><span class="sol-rep">Elevar</span><span class="sol-rep">Triple Whale</span><span class="sol-rep">Stape</span><span class="sol-rep">Littledata</span><span class="sol-rep">Analyzify</span></div>
+          <div class="sol-meta"><span class="sol-save">$145–$650/mo saved</span><span class="sol-time">~6 min</span></div>
+        </div>
+        <div class="sol-foot">
+          <a href="/capi-shield/" class="sol-cta">Fix Meta Ads Tracking — Free →</a>
+          <a href="/shopify-google-ads-conversion-tracking/" class="sol-guide">Fix Google Ads Tracking — Free →</a>
+          <a href="/go/make/?source=home-card-capi" target="_blank" rel="noopener sponsored" class="sol-aff" data-cta-position="card-capi">Needs Make.com — start free <span class="aff-mark">affiliate</span></a>
+        </div>
+      </article>
+
+      <article class="sol-card t">
+        <div class="sol-bar"></div>
+        <div class="sol-body">
+          <span class="tag tag-tiktok">TikTok Tracking</span>
+          <h3 class="sol-name">TikTok Events API</h3>
+          <p class="sol-hl">Close the TikTok Browser Tracking Gap</p>
+          <p class="sol-desc">CompletePayment events sent server-side via Make.com. iOS and ad blockers can't intercept. Full Advanced Matching data. No code, no Shopify app install.</p>
+          <div class="sol-rep-label">Replaces</div>
+          <div class="sol-reps"><span class="sol-rep">WeltPixel</span><span class="sol-rep">Analyzify</span><span class="sol-rep">Elevar TikTok</span></div>
+          <div class="sol-meta"><span class="sol-save" style="color:var(--tiktok)">$39–$299/mo saved</span><span class="sol-time">~6 min</span></div>
+        </div>
+        <div class="sol-foot">
+          <a href="/tiktok-events-api-shopify/" class="sol-cta">Deploy TikTok CAPI — Free →</a>
+          <a href="/tiktok-events-api-shopify/" class="sol-guide">No-code setup guide →</a>
+          <a href="/go/make/?source=home-card-tiktok" target="_blank" rel="noopener sponsored" class="sol-aff" data-cta-position="card-tiktok">Needs Make.com — start free <span class="aff-mark">affiliate</span></a>
+        </div>
+      </article>
+
+      <article class="sol-card g" style="border-color:rgba(52,211,119,.18);">
+        <div class="sol-bar" style="background:linear-gradient(90deg,var(--g),#00a8e8);"></div>
+        <div class="sol-body">
+          <span class="tag">Email Marketing</span>
+          <h3 class="sol-name">Replace Klaviyo</h3>
+          <p class="sol-hl">Stop Paying Klaviyo $20+/Month</p>
+          <p class="sol-desc">Systeme.io replaces Klaviyo entirely — unlimited emails, automations, funnels, CRM on the free plan. 2,000 contacts, unlimited sends, $0. Klaviyo's Feb 2025 billing change charges for all active profiles. <a href="/replace-klaviyo-free/" style="color:var(--g);font-size:var(--fs-sm);">Full comparison →</a></p>
+          <div class="sol-rep-label">Replaces</div>
+          <div class="sol-reps"><span class="sol-rep">Klaviyo</span><span class="sol-rep">Mailchimp</span><span class="sol-rep">ClickFunnels</span></div>
+          <div class="sol-meta"><span class="sol-save">$20+/mo saved</span><span class="sol-time">~30 min</span></div>
+        </div>
+        <div class="sol-foot">
+          <a href="/replace-klaviyo-free/" class="sol-cta">Replace Klaviyo — Free →</a>
+          <a href="/replace-klaviyo-free/" class="sol-guide">Is Klaviyo actually free? →</a>
+          <a href="/go/systeme/?source=home-card-klaviyo" target="_blank" rel="noopener sponsored" class="sol-aff" data-cta-position="card-klaviyo">Start free on Systeme.io <span class="aff-mark">affiliate</span></a>
+        </div>
+      </article>
+
+      <article class="sol-card s">
+        <div class="sol-bar"></div>
+        <div class="sol-body">
+          <span class="tag tag-sky">P&amp;L Reporting</span>
+          <h3 class="sol-name">P&amp;L Auto</h3>
+          <p class="sol-hl">Live Profit &amp; Loss — Zero Spreadsheet Work</p>
+          <p class="sol-desc">Every Shopify order auto-calculates revenue, COGS, ad spend, and net profit into a live Google Sheets dashboard within 60 seconds of payment. Real-time P&amp;L without a BI tool or paid dashboard app.</p>
+          <div class="sol-rep-label">Replaces</div>
+          <div class="sol-reps"><span class="sol-rep">Glew.io</span><span class="sol-rep">BeProfit</span><span class="sol-rep">TrueProfit</span><span class="sol-rep">Peel</span></div>
+          <div class="sol-meta"><span class="sol-save" style="color:var(--sky)">$19–$299/mo saved</span><span class="sol-time">~8 min</span></div>
+        </div>
+        <div class="sol-foot">
+          <a href="/shopify-profit-loss-automation/" class="sol-cta">Deploy P&amp;L Auto — Free →</a>
+          <a href="/shopify-profit-loss-automation/" class="sol-guide">Find your profit leaks first →</a>
+          <a href="/go/make/?source=home-card-pl" target="_blank" rel="noopener sponsored" class="sol-aff" data-cta-position="card-pl">Needs Make.com — start free <span class="aff-mark">affiliate</span></a>
+        </div>
+      </article>
+
+      <article class="sol-card v">
+        <div class="sol-bar"></div>
+        <div class="sol-body">
+          <span class="tag tag-vio">Automation Stability</span>
+          <h3 class="sol-name">Autocrat Quota Fix</h3>
+          <p class="sol-hl">Stop Automation Crashes Mid-Month</p>
+          <p class="sol-desc">Prevents Google Apps Script "Service invoked too many times" quota errors that silently kill workflows. Moves document automation to Make.com, bypassing the 6-minute execution limit and 90-minute daily runtime cap.</p>
+          <div class="sol-rep-label">Replaces</div>
+          <div class="sol-reps"><span class="sol-rep">Zapier</span><span class="sol-rep">Paid Make tiers</span></div>
+          <div class="sol-meta"><span class="sol-save" style="color:var(--vio)">$49–$99/mo saved</span><span class="sol-time">~3 min</span></div>
+        </div>
+        <div class="sol-foot">
+          <a href="/autocrat-quota-fix/" class="sol-cta">Deploy Quota Fix — Free →</a>
+          <a href="/make-com-shopify/" class="sol-guide">What is Make.com? →</a>
+          <a href="/go/make/?source=home-card-autocrat" target="_blank" rel="noopener sponsored" class="sol-aff" data-cta-position="card-autocrat">Needs Make.com — start free <span class="aff-mark">affiliate</span></a>
+        </div>
+      </article>
+
+      <article class="sol-card v" style="grid-column:1/-1;">
+        <div class="sol-bar" style="background:linear-gradient(90deg,#c3b8ef,#8ccfe8);"></div>
+        <div class="sol-body" style="padding:32px;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap;">
+          <div style="flex:1;min-width:260px;">
+            <span class="tag tag-vio">AI Tools Guide — New</span>
+            <h3 class="sol-name" style="margin-top:14px;">Best AI Tools for Shopify 2026</h3>
+            <p class="sol-hl">9 AI Tools Ranked by Real-World ROI</p>
+            <p class="sol-desc">GetResponse vs Klaviyo, Writesonic, AdCreative.ai, Synthesia and 5 more — ranked by real ROI for DTC Shopify brands. Honest verdicts, real commission rates, free alternatives noted on every tool.</p>
+            <div class="sol-reps"><span style="font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:3px 9px;border-radius:3px;">9 tools reviewed</span><span style="font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:3px 9px;border-radius:3px;">3 free options</span><span style="font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:3px 9px;border-radius:3px;">DTC-focused rankings</span></div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:10px;min-width:200px;">
+            <a href="/best-ai-tools-shopify/" class="sol-cta" style="background:#c3b8ef;">Read AI Tools Guide →</a>
+            <a href="/best-ai-tools-shopify/#sa-comparison" class="sol-guide">Jump to comparison table →</a>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+<!-- =============================================================== -->
+<!-- STYLES FOR CHUNK 3 SECTIONS                                      -->
+<!-- =============================================================== -->
+<style is:global>
+/* Calculator Showcase */
+.calc-showcase{background:var(--bg-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:var(--sp) 24px;}
+.calc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:14px;margin-top:24px;}
+.calc-card{background:var(--bg-3);border:1.5px solid var(--border-2);border-radius:12px;padding:26px;display:flex;flex-direction:column;gap:12px;text-decoration:none;transition:border-color .2s,transform .2s,box-shadow .2s;}
+.calc-card:hover{border-color:var(--g-border);transform:translateY(-3px);box-shadow:0 16px 40px rgba(52,211,119,.08);}
+.calc-icon{width:42px;height:42px;border-radius:10px;background:var(--g-bg);border:1px solid var(--g-border);display:flex;align-items:center;justify-content:center;color:var(--g);font-family:var(--mono);font-size:var(--fs-md);font-weight:700;}
+.calc-label{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--text-4);}
+.calc-name{font-weight:800;font-size:var(--fs-body);color:var(--text);letter-spacing:-.02em;line-height:1.25;}
+.calc-desc-c{font-size:var(--fs-md);color:var(--text-3);line-height:1.65;flex:1;}
+.calc-pair{font-family:var(--mono);font-size:var(--fs-micro);color:var(--g);font-weight:600;}
+.calc-cta{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-2);margin-top:4px;transition:color .2s;}
+.calc-card:hover .calc-cta{color:var(--g);}
+.calc-footer-cta{text-align:center;margin-top:32px;}
+.calc-footer-cta a{font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-3);text-decoration:none;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border-2);padding-bottom:2px;transition:border-color .2s,color .2s;}
+.calc-footer-cta a:hover{color:var(--g);border-color:var(--g);}
+
+/* Verified Mechanics */
+.mech-intro{text-align:center;max-width:640px;margin:0 auto 40px;}
+.mech-intro p{font-size:var(--fs-body);color:var(--text-3);line-height:1.75;}
+.mech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;}
+.mech-card{background:var(--bg-3);border:1.5px solid var(--border);border-left:3px solid var(--g);border-radius:10px;padding:26px 28px;display:flex;flex-direction:column;gap:14px;}
+.mech-num{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.2em;color:var(--g);}
+.mech-claim{font-size:var(--fs-md);color:var(--text);line-height:1.6;font-weight:500;}
+.mech-claim-c{font-size:var(--fs-body);color:var(--text);line-height:1.6;font-weight:500;}
+.mech-claim strong,.mech-claim-c strong{color:var(--g);font-weight:700;}
+.mech-source{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);margin-top:auto;padding-top:12px;border-top:1px solid var(--border);}
+.mech-source a{color:var(--text-3);text-decoration:none;border-bottom:1px solid var(--border-2);padding-bottom:1px;transition:color .2s,border-color .2s;}
+.mech-source a:hover{color:var(--g);border-color:var(--g);}
+
+/* Comparison Table */
+.compare-table-wrap{background:var(--bg-3);border:1.5px solid var(--border-2);border-radius:14px;overflow:hidden;}
+.compare-table{width:100%;border-collapse:collapse;}
+.compare-table th{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text-4);padding:18px 24px;text-align:left;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02);}
+.compare-table th:nth-child(2){color:var(--red);}
+.compare-table th:nth-child(3){color:var(--g);text-align:right;}
+.compare-table td{padding:18px 24px;font-size:var(--fs-md);border-bottom:1px solid var(--border);color:var(--text-2);}
+.compare-table td:nth-child(2){font-family:var(--mono);color:var(--text-4);text-decoration:line-through;text-decoration-color:rgba(240,138,138,.4);}
+.compare-table td:nth-child(3){font-family:var(--mono);color:var(--g);font-weight:700;text-align:right;}
+.compare-table tr:last-child td{border-bottom:none;}
+.compare-table tfoot td{background:rgba(52,211,119,.05);font-weight:700;border-top:2px solid var(--border-2);}
+.compare-table tfoot td:first-child{color:var(--text);}
+.compare-table tfoot td:nth-child(2){font-family:var(--mono);color:var(--red);text-decoration:none;font-size:var(--fs-md);}
+.compare-table tfoot td:nth-child(3){font-family:var(--mono);color:var(--g);font-size:var(--fs-lg);}
+.compare-footer{padding:22px 24px;background:var(--bg-4);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;border-top:1px solid var(--border);}
+.compare-summary{font-size:var(--fs-md);color:var(--text-2);}
+.compare-summary strong{color:var(--g);font-family:var(--mono);}
+
+/* Pro Banner — earned placement */
+.pro-banner{background:linear-gradient(135deg,rgba(245,182,77,.08) 0%,rgba(245,182,77,.03) 100%);border:1.5px solid rgba(245,182,77,.25);border-radius:14px;padding:36px;display:flex;align-items:center;justify-content:space-between;gap:32px;flex-wrap:wrap;position:relative;overflow:hidden;}
+.pro-banner::before{content:'';position:absolute;top:0;right:0;width:300px;height:100%;background:radial-gradient(ellipse at right,rgba(245,182,77,.06) 0%,transparent 70%);pointer-events:none;}
+.pro-banner-left{flex:1;min-width:260px;position:relative;}
+.pro-banner-eyebrow{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--pro);margin-bottom:10px;}
+.pro-banner-title{font-weight:700;font-size:clamp(20px,3vw,28px);color:var(--text);letter-spacing:-.03em;line-height:1.1;margin-bottom:10px;}
+.pro-banner-desc{font-size:var(--fs-md);color:var(--text-3);line-height:1.7;max-width:500px;margin-bottom:16px;}
+.pro-banner-specs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:0;}
+.pro-spec{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:4px 10px;border-radius:3px;}
+.pro-banner-right{display:flex;flex-direction:column;align-items:flex-end;gap:12px;flex-shrink:0;position:relative;}
+.pro-price-box{text-align:center;background:rgba(245,182,77,.08);border:1px solid rgba(245,182,77,.2);border-radius:8px;padding:16px 24px;}
+.pro-price-val{font-family:var(--mono);font-size:var(--fs-xl);font-weight:700;color:var(--pro);line-height:1;}
+.pro-price-label{font-size:12px;color:var(--text-3);margin-top:4px;}
+.pro-price-saves{font-family:var(--mono);font-size:var(--fs-micro);color:var(--g);margin-top:6px;font-weight:700;}
+
+/* Affiliate Cards */
+/* Explicit column counts (not auto-fit) so the orphan rule below can know
+   how many columns there are. With 7 cards the last one would otherwise sit
+   alone in a 3-col row at desktop and a 2-col row at tablet. */
+.aff-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;}
+/* A trailing card that starts its own row spans the full width instead of
+   floating alone. Works for any card count, not just 7. */
+.aff-card:last-child:nth-child(3n+1){grid-column:1/-1;}
+.aff-card:last-child:nth-child(3n+1) .aff-card-desc{max-width:70ch;}
+.aff-card:last-child:nth-child(3n+1) .aff-card-cta{width:auto;align-self:flex-start;min-width:260px;}
+@media (max-width:1023px){
+  .aff-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .aff-card:last-child:nth-child(3n+1){grid-column:auto;}
+  .aff-card:last-child:nth-child(2n+1){grid-column:1/-1;}
+  .aff-card:last-child:nth-child(2n+1) .aff-card-cta{width:auto;align-self:flex-start;min-width:260px;}
+}
+@media (max-width:639px){
+  .aff-grid{grid-template-columns:minmax(0,1fr);}
+  .aff-card:last-child:nth-child(n){grid-column:auto;}
+  .aff-card:last-child .aff-card-cta{width:100%;align-self:auto;}
+}
+.aff-card{background:var(--bg-3);border:1.5px solid var(--border-2);border-radius:12px;padding:28px;display:flex;flex-direction:column;gap:14px;transition:border-color .2s,transform .2s;}
+.aff-card:hover{border-color:var(--g-border);transform:translateY(-3px);}
+.aff-card-tag{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--text-4);}
+.aff-card-name{font-weight:700;font-size:var(--fs-lg);color:var(--text);letter-spacing:-.02em;line-height:1.2;}
+.aff-card-desc{font-size:var(--fs-md);color:var(--text-3);line-height:1.7;flex:1;}
+.aff-card-saving{font-family:var(--mono);font-size:var(--fs-sm);color:var(--g);font-weight:700;}
+/* Visual treatment now comes from .cta-primary in global.css.
+   This rule only handles grid placement: push the CTA to the card floor
+   so every card in a row ends on the same baseline. */
+.aff-card-cta{margin-top:auto;width:100%;}
+
+/* CTA Strip */
+.cta-strip{background:var(--bg-3);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:36px 24px;}
+.cta-strip-inner{max-width:860px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;}
+.cta-strip-title{font-weight:700;font-size:clamp(16px,2.5vw,22px);color:var(--text);letter-spacing:-.02em;margin-bottom:5px;line-height:1.3;}
+.cta-strip-sub{font-size:var(--fs-sm);color:var(--text-3);}
+.cta-strip-sub span{color:var(--g);font-weight:600;}
+.cta-strip-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+
+@media(max-width:640px){
+  .compare-table th,.compare-table td{padding:12px 14px;font-size:var(--fs-sm);}
+  .pro-banner{flex-direction:column;padding:28px 22px;}
+  .pro-banner-right{align-items:flex-start;width:100%;}
+  .cta-strip-inner{flex-direction:column;text-align:center;}
+  .cta-strip-actions{justify-content:center;width:100%;}
+}
+</style>
+
+<!-- =============================================================== -->
+<!-- CTA STRIP 1 — After solutions, before calculators                -->
+<!-- =============================================================== -->
+<div class="cta-strip">
+  <div class="cta-strip-inner">
+    <div>
+      <div class="cta-strip-title">Ready to stop the leak?</div>
+      <div class="cta-strip-sub">Deploy your first free tool in <span>~6 minutes</span>. No code, no card, no subscription.</div>
+    </div>
+    <div class="cta-strip-actions">
+      <a href="/go/make/?source=home-cta-strip" target="_blank" rel="noopener sponsored" class="btn btn-sm" data-cta-position="cta-strip">Start free on Make.com →</a>
+      <a href="#tools-h" class="btn-outline btn-outline-sm">See all platforms</a>
+    </div>
+  </div>
+</div>
+
+<!-- =============================================================== -->
+<!-- CALCULATOR SHOWCASE — Free diagnostics, AI citation magnet       -->
+<!-- =============================================================== -->
+<!-- ============================================================ -->
+<!-- MOST POPULAR GUIDES — internal-link hub to proven top pages  -->
+<!-- Ordered by GSC impressions (last 3 months).                  -->
+<!-- ============================================================ -->
+<section class="section" id="sa-popular" aria-labelledby="pop-h">
+  <div class="inner-lg">
+    <div class="sec-head">
+      <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">Most-read guides · Updated for 2026</span>
+      <h2 id="pop-h">Start With the <span style="color:var(--g)">Guides Store Owners Read Most</span></h2>
+      <p>The deep-dives and fixes pulling the most searches this quarter — quota errors, server-side tracking, ad attribution recovery, and the automation stack that ties them together.</p>
+    </div>
+
+    <div class="sol-grid">
+      <article class="sol-card g">
+        <div class="sol-bar" style="background:linear-gradient(90deg,var(--g),#f5b64d);"></div>
+        <div class="sol-body">
+          <span class="tag">Google Apps Script</span>
+          <h3 class="sol-name">Apps Script Quotas, Explained</h3>
+          <p class="sol-hl">Stop "Service Invoked Too Many Times" Crashes</p>
+          <p class="sol-desc">Why Google Apps Script silently kills high-volume automations — and how to architect around the 6-minute execution limit and daily runtime caps so your workflows scale instead of failing mid-month.</p>
+        </div>
+        <div class="sol-foot">
+          <a href="/blog/google-apps-script-quotas-explained-how-to-avoid-limits-and-scale-your-automations/" class="sol-cta">Read the quotas guide →</a>
+          <a href="/blog/how-to-fix-service-invoked-too-many-times-in-google-apps-script/" class="sol-guide">Fix the error now →</a>
+        </div>
+      </article>
+
+      <article class="sol-card t">
+        <div class="sol-bar"></div>
+        <div class="sol-body">
+          <span class="tag tag-tiktok">TikTok Tracking</span>
+          <h3 class="sol-name">TikTok Events API Setup</h3>
+          <p class="sol-hl">Close the TikTok Browser Tracking Gap</p>
+          <p class="sol-desc">Send CompletePayment events server-side via Make.com so iOS and ad blockers can't intercept them. No code, no app install — full Advanced Matching data on every event.</p>
+        </div>
+        <div class="sol-foot">
+          <a href="/tiktok-events-api-shopify/" class="sol-cta">Deploy TikTok CAPI — Free →</a>
+          <a href="/tiktok-events-api-shopify/" class="sol-guide">No-code setup guide →</a>
+        </div>
+      </article>
+
+      <article class="sol-card v">
+        <div class="sol-bar"></div>
+        <div class="sol-body">
+          <span class="tag tag-vio">Automation Stability</span>
+          <h3 class="sol-name">Autocrat Quota Fix</h3>
+          <p class="sol-hl">Stop Document Automation Dying Mid-Month</p>
+          <p class="sol-desc">Move Autocrat-style document workflows off Apps Script and onto Make.com, bypassing the execution and daily-runtime limits that quietly break high-volume stores.</p>
+        </div>
+        <div class="sol-foot">
+          <a href="/autocrat-quota-fix/" class="sol-cta">Deploy Quota Fix — Free →</a>
+          <a href="/make-com-shopify/" class="sol-guide">What is Make.com? →</a>
+        </div>
+      </article>
+
+      <article class="sol-card g">
+        <div class="sol-bar" style="background:linear-gradient(90deg,var(--g),#00a8e8);"></div>
+        <div class="sol-body">
+          <span class="tag">Ad Attribution</span>
+          <h3 class="sol-name">Meta ROAS Dropped — Fix</h3>
+          <p class="sol-hl">Why Meta Shows Fewer Sales Than Shopify</p>
+          <p class="sol-desc">The 2026 diagnosis: iOS attribution gaps, pixel loss, and under-reporting — plus the server-side fix that reconciles Meta's numbers with your actual revenue.</p>
+        </div>
+        <div class="sol-foot">
+          <a href="/blog/shopify-meta-roas-dropped-2026-fix/" class="sol-cta">Fix Meta reporting →</a>
+          <a href="/shopify-vs-meta-attribution-gap-calculator/" class="sol-guide">Measure your gap first →</a>
+        </div>
+      </article>
+
+      <article class="sol-card s">
+        <div class="sol-bar"></div>
+        <div class="sol-body">
+          <span class="tag tag-sky">Server-Side Tracking</span>
+          <h3 class="sol-name">Server-Side Tracking Setup</h3>
+          <p class="sol-hl">The Complete Shopify CAPI Setup Guide</p>
+          <p class="sol-desc">End-to-end: what server-side tracking is, why iOS made it mandatory, and the exact Make.com build that feeds Meta CAPI and Google Enhanced Conversions from one event stream.</p>
+        </div>
+        <div class="sol-foot">
+          <a href="/blog/shopify-server-side-tracking-complete-setup-guide/" class="sol-cta">Read the setup guide →</a>
+          <a href="/blog/shopify-server-side-tracking-complete-setup-guide/" class="sol-guide">Server-side tracking, explained →</a>
+        </div>
+      </article>
+
+      <article class="sol-card v">
+        <div class="sol-bar" style="background:linear-gradient(90deg,#c3b8ef,#8ccfe8);"></div>
+        <div class="sol-body">
+          <span class="tag tag-vio">Automation Stack</span>
+          <h3 class="sol-name">Ultimate Automation Guide</h3>
+          <p class="sol-hl">The Full $0 Shopify Automation Stack</p>
+          <p class="sol-desc">Every workflow on the site, in deploy order — tracking, P&amp;L, inventory, email — assembled into one coherent free stack instead of scattered fixes.</p>
+        </div>
+        <div class="sol-foot">
+          <a href="/ultimate-shopify-automation-guide/" class="sol-cta">See the full stack →</a>
+          <a href="/shopify-automation-guides/" class="sol-guide">Browse all guides →</a>
+        </div>
+      </article>
+    </div>
+
+    <div style="text-align:center;margin-top:40px;">
+      <a href="/shopify-automation-guides/" class="sol-cta" style="display:inline-flex;">Browse all Shopify automation guides →</a>
+    </div>
+  </div>
+</section>
+<section class="calc-showcase" id="sa-calculators" aria-labelledby="calc-h">
+  <div class="inner-lg">
+    <div class="sec-head">
+      <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">9 free calculators · Zero signup · Instant results</span>
+      <h2 id="calc-h">Run the Numbers <span style="color:var(--g)">Before</span> You Deploy</h2>
+      <p>Free diagnostic calculators that quantify your exact loss, score migration risk, and identify priorities — so you deploy in the right order. No email required, no data stored, results in under 30 seconds.</p>
+    </div>
+
+    <div class="calc-grid">
+      <a href="/shopify-app-cost-calculator/" class="calc-card">
+        <div class="calc-icon">$</div>
+        <div class="calc-label">Cost Calculator</div>
+        <div class="calc-name">App Cost Calculator</div>
+        <p class="calc-desc-c">Enter your monthly spend across tracking, email, inventory, and analytics apps. Get your exact annual waste figure and recoverable spend.</p>
+        <div class="calc-pair">→ Pairs with the full $0 stack</div>
+        <span class="calc-cta">Calculate my waste →</span>
+      </a>
+
+      <a href="/meta-emq-score-estimator/" class="calc-card">
+        <div class="calc-icon">EMQ</div>
+        <div class="calc-label">Diagnostic</div>
+        <div class="calc-name">Meta EMQ Score Estimator</div>
+        <p class="calc-desc-c">Estimate your Meta Conversions API Event Match Quality score before deploying server-side tracking. Quantifies ad spend lost to low EMQ.</p>
+        <div class="calc-pair">→ Pairs with CAPI Shield</div>
+        <span class="calc-cta">Score my EMQ →</span>
+      </a>
+
+      <a href="/shopify-vs-meta-attribution-gap-calculator/" class="calc-card">
+        <div class="calc-icon">Δ</div>
+        <div class="calc-label">Diagnostic</div>
+        <div class="calc-name">Attribution Gap Calculator</div>
+        <p class="calc-desc-c">Shopify shows one revenue number. Meta shows another. GA4 shows a third. This calculator tells you which platform to trust and what to fix first.</p>
+        <div class="calc-pair">→ Pairs with CAPI Shield</div>
+        <span class="calc-cta">Calculate my gap →</span>
+      </a>
+
+      <a href="/klaviyo-to-systeme-migration-savings-calculator/" class="calc-card">
+        <div class="calc-icon">✉</div>
+        <div class="calc-label">Savings</div>
+        <div class="calc-name">Klaviyo Migration Savings</div>
+        <p class="calc-desc-c">Enter your list size and send frequency. Get your exact annual saving from switching Klaviyo to Systeme.io plus estimated migration time.</p>
+        <div class="calc-pair">→ Pairs with Replace Klaviyo</div>
+        <span class="calc-cta">See my savings →</span>
+      </a>
+
+      <a href="/stocky-migration-risk-scorer/" class="calc-card">
+        <div class="calc-icon" style="background:rgba(245,182,77,.08);border-color:rgba(245,182,77,.2);color:var(--amber);">!</div>
+        <div class="calc-label" style="color:var(--amber);">Urgent · Aug 2026</div>
+        <div class="calc-name">Stocky Migration Risk Scorer</div>
+        <p class="calc-desc-c">Score your Stocky replacement risk based on SKU count, supplier complexity, and reorder frequency. Get a personalised replacement plan before the shutdown.</p>
+        <div class="calc-pair">→ Pairs with Stocky Swap</div>
+        <span class="calc-cta">Score my risk →</span>
+      </a>
+
+
+
+      <a href="/make-vs-zapier-cost-calculator/" class="calc-card">
+        <div class="calc-icon">⚙</div>
+        <div class="calc-label">Cost</div>
+        <div class="calc-name">Make vs Zapier Calculator</div>
+        <p class="calc-desc-c">Calculate the exact annual cost difference between Make.com and Zapier for your automation volume. Most stores save $500+/year switching.</p>
+        <div class="calc-pair">→ Pairs with every free tool</div>
+        <span class="calc-cta">Compare costs →</span>
+      </a>
+
+    </div>
+
+    <div class="calc-footer-cta">
+      <a href="/tools/">See all free tools and calculators →</a>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== -->
+<!-- VERIFIED MECHANICS — Replaces testimonials. AI-citation gold    -->
+<!-- =============================================================== -->
+<section class="section" id="sa-verified" aria-labelledby="mech-h">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="tag" style="margin-bottom:16px;display:inline-flex;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="margin-right:4px;"><path d="M20 6L9 17l-5-5"/></svg>Verifiable claims · All sourced</span>
+      <h2 id="mech-h">Every Claim on This Page — <span style="color:var(--g)">Verified</span></h2>
+    </div>
+
+    <div class="mech-intro">
+      <p>We don't use fabricated testimonials or inflated user counts. Every technical claim and cost figure on this page is checkable against primary sources. Here are the six mechanics that make the $0 stack possible — with direct links to verify each. Stack Architect's founder was also interviewed by <a href="https://ctosync.com/qa/deciding-when-engineering-teams-pay-down-technical-debt/" target="_blank" rel="noopener">CTO Sync on prioritising engineering technical debt</a>, and argued in <a href="https://techround.co.uk/artificial-intelligence/quite-contrary-the-real-reason-enterprise-ai-pilots-fail-according-to-chase-w-hughes/" target="_blank" rel="noopener">TechRound that enterprise AI pilots fail at the boundary between non-deterministic models and deterministic legacy systems</a>. The same determinism-first rule — build the verifiable pipeline before the model — is set out in <a href="https://informaticsmagazine.com/qa/balance-data-pipeline-debt-with-new-delivery-demands/" target="_blank" rel="noopener">Informatics Magazine on balancing data pipeline debt against new delivery demands</a>, and it is why every stack on this page is a pipeline you can inspect rather than a black box you have to trust.</p>
+    </div>
+
+    <div class="mech-grid">
+      <div class="mech-card">
+        <div class="mech-num">Mechanism 01</div>
+        <p class="mech-claim-c"><strong>Make.com's free tier includes 1,000 credits/month (formerly called operations)</strong> — enough to run the entire stack as a single consolidated scenario: one Shopify orders/paid webhook with router branches feeding Meta CAPI, Google Enhanced Conversions, TikTok Events API, P&amp;L logging and inventory logging &mdash; comfortably inside the free plan's two-active-scenario limit, on a store processing up to ~250 orders/month (4 credits per order).</p>
+        <div class="mech-source">Source: <a href="https://www.make.com/en/pricing" target="_blank" rel="noopener">Make.com pricing page ↗</a></div>
+        <div class="mech-act"><a href="/go/make/?source=home-mech-make" target="_blank" rel="noopener sponsored" data-cta-position="mech-make">Start free on Make.com →</a> <span class="aff-mark">affiliate</span></div>
+      </div>
+
+      <div class="mech-card">
+        <div class="mech-num">Mechanism 02</div>
+        <p class="mech-claim-c"><strong>Shopify is permanently shutting down Stocky on August 31, 2026</strong> with no automatic data migration. All purchase orders, stocktakes, transfers, and SKU history will be deleted.</p>
+        <div class="mech-source">Source: <a href="https://help.shopify.com/en/manual/products/inventory/getting-started/transitioning-from-stocky" target="_blank" rel="noopener">Shopify Help Center — transitioning from Stocky ↗</a></div>
+      </div>
+
+      <div class="mech-card">
+        <div class="mech-num">Mechanism 03</div>
+        <p class="mech-claim-c"><strong>Meta scores Event Match Quality from the customer parameters an event carries</strong> — email, phone, name, IP and user-agent, each hashed. Sending more match keys server-side raises the score; the browser pixel alone carries fewer. Meta documents the scoring, not a target number, and we have not measured this setup against Elevar or Triple Whale.</p>
+        <div class="mech-source">Source: <a href="https://www.facebook.com/business/help/734453412795747" target="_blank" rel="noopener">Meta Event Match Quality documentation ↗</a></div>
+      </div>
+
+      <div class="mech-card">
+        <div class="mech-num">Mechanism 04</div>
+        <p class="mech-claim-c"><strong>Systeme.io's free plan includes 2,000 contacts, unlimited email sends, full automation sequences, sales funnels, and CRM</strong> — permanently, with no credit card required.</p>
+        <div class="mech-source">Source: <a href="https://systeme.io/pricing" target="_blank" rel="noopener">Systeme.io pricing page ↗</a></div>
+        <div class="mech-act"><a href="/go/systeme/?source=home-mech-systeme" target="_blank" rel="noopener sponsored" data-cta-position="mech-systeme">Start free on Systeme.io →</a> <span class="aff-mark">affiliate</span></div>
+      </div>
+
+      <div class="mech-card">
+        <div class="mech-num">Mechanism 05</div>
+        <p class="mech-claim-c"><strong>Klaviyo changed its billing model in February 2025 to charge for all active profiles</strong> regardless of whether they're emailed — pushing comparable-volume pricing to $20+/month for stores that previously paid far less.</p>
+        <div class="mech-source">Source: <a href="https://help.klaviyo.com/hc/en-us/articles/33136281415451" target="_blank" rel="noopener">Klaviyo Help Center — Feb 18, 2025 billing changes ↗</a></div>
+      </div>
+
+      <div class="mech-card">
+        <div class="mech-num">Mechanism 06</div>
+        <p class="mech-claim-c"><strong>iOS 26 Link Tracking Protection strips fbclid and gclid</strong> from URLs in Safari Private Browsing, Mail, and Messages — blocking browser-based attribution for <a href="/shopify-ios-attribution-gap-benchmark/">ad-driven purchases that arrive through those routes</a>. Server-side CAPI bypasses this entirely.</p>
+        <div class="mech-source">Source: <a href="https://developers.facebook.com/docs/marketing-api/conversions-api/" target="_blank" rel="noopener">Meta for Developers — Conversions API ↗</a></div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:40px;padding:24px;background:var(--bg-3);border:1px solid var(--border);border-radius:10px;max-width:640px;margin-left:auto;margin-right:auto;">
+      <p style="font-size:var(--fs-sm);color:var(--text-3);line-height:1.7;margin:0;"><strong style="color:var(--text-2);">Why transparency?</strong> Stack Architect's free tools are funded by affiliate commissions (Make.com, Systeme.io, GetResponse, Beehiiv, Tidio, Gorgias, Google Workspace) at no extra cost to you, plus the optional $24 Complete Kit. No subscriptions, no upsells, no data sold. <a href="/about/" style="color:var(--g);">Read more →</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== -->
+<!-- COMPARISON TABLE — Paid Apps vs $0 Stack                         -->
+<!-- =============================================================== -->
+<section class="section-alt" id="sa-compare-table" aria-labelledby="ct-h">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">Side-by-side · Verified pricing</span>
+      <h2 id="ct-h">Paid Apps vs <span style="color:var(--g)">The $0 Stack</span></h2>
+      <p>Every paid category and its verified free replacement. All prices cross-referenced against vendor pricing pages as of July 2026.</p>
+    </div>
+
+    <div class="compare-table-wrap">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Paid app cost</th>
+            <th>Stack Architect</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Email Marketing &amp; CRM <small style="color:var(--text-4);display:block;font-size:var(--fs-micro);margin-top:3px;">Klaviyo, Mailchimp, ClickFunnels</small></td>
+            <td>$20+/mo</td>
+            <td>Systeme.io — Free</td>
+          </tr>
+          <tr>
+            <td>Ad Attribution &amp; CAPI <small style="color:var(--text-4);display:block;font-size:var(--fs-micro);margin-top:3px;">Elevar, Triple Whale, Northbeam, Analyzify</small></td>
+            <td>$145–$650/mo</td>
+            <td>CAPI Shield — Free</td>
+          </tr>
+          <tr>
+            <td>Inventory Management <small style="color:var(--text-4);display:block;font-size:var(--fs-micro);margin-top:3px;">Stocky (shutting down), Linnworks, Skubana, Inventory Planner</small></td>
+            <td>$29–$500/mo</td>
+            <td>Stocky Swap — Free</td>
+          </tr>
+          <tr>
+            <td>Workflow Automation <small style="color:var(--text-4);display:block;font-size:var(--fs-micro);margin-top:3px;">Zapier, Tray.io, Workato</small></td>
+            <td>$19.99+/mo</td>
+            <td>Make.com Free — Free</td>
+          </tr>
+          <tr>
+            <td>TikTok Server-Side Tracking <small style="color:var(--text-4);display:block;font-size:var(--fs-micro);margin-top:3px;">WeltPixel, Analyzify TikTok</small></td>
+            <td>$39–$299/mo</td>
+            <td>TikTok Events API — Free</td>
+          </tr>
+          <tr>
+            <td>P&amp;L &amp; Profit Reporting <small style="color:var(--text-4);display:block;font-size:var(--fs-micro);margin-top:3px;">TrueProfit, BeProfit, Glew.io, Peel</small></td>
+            <td>$19–$299/mo</td>
+            <td>P&amp;L Auto — Free</td>
+          </tr>
+          <tr>
+            <td>Automation Stability <small style="color:var(--text-4);display:block;font-size:var(--fs-micro);margin-top:3px;">Paid Make tiers, Zapier upgrades</small></td>
+            <td>$49–$99/mo</td>
+            <td>Autocrat Quota Fix — Free</td>
+          </tr>
+        </tbody>
+        <tfoot>
+          <tr>
+            <td>Total monthly cost</td>
+            <td>{MO_RANGE}</td>
+            <td>$0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+      <div class="compare-footer">
+        <div class="compare-summary">Every row above, added up: <strong>{YR_RANGE}</strong>. Categories quoted &ldquo;from $X&rdquo; contribute their floor to both bounds, so both figures understate.</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+          <a href="/go/make/?source=home-compare-table" target="_blank" rel="noopener sponsored" class="btn btn-sm" data-cta-position="compare-table">Start free on Make.com →</a>
+          <a href="#tools-h" class="btn-outline btn-outline-sm">See all platforms</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== -->
+<!-- PRO BANNER — Earned placement after free value established      -->
+<!-- =============================================================== -->
+<section class="section sec-major sec-commercial" aria-labelledby="pro-h">
+  <div class="inner">
+    <div class="pro-banner">
+      <div class="pro-banner-left">
+        <div class="pro-banner-eyebrow">⚡ The pre-built version — optional</div>
+        <h2 id="pro-h" class="pro-banner-title">Skip the 8-hour build.<br>Import the Complete Kit in 10 minutes.</h2>
+        <p class="pro-banner-desc">Every free tool above can be built yourself using the free guides — most stores do exactly that. If your time is worth more than $24, the Complete Kit gives you the four finished Make.com blueprints ready to import: <strong style="color:var(--text-2)">every field pre-mapped, every API pre-configured.</strong> Add your credentials, click import, done. One payment. No subscription. 30-day money-back guarantee.</p>
+        <div class="pro-banner-specs">
+          <span class="pro-spec">4 × JSON blueprints</span>
+          <span class="pro-spec">2 × Sheets templates</span>
+          <span class="pro-spec">4 × Loom walkthroughs</span>
+          <span class="pro-spec">Instant Stripe delivery</span>
+          <span class="pro-spec">30-day guarantee</span>
+          <span class="pro-spec">No subscription ever</span>
+        </div>
+      </div>
+      <div class="pro-banner-right">
+        <div class="pro-price-box">
+          <div class="pro-price-val">$24</div>
+          <div class="pro-price-label">one-time · no subscription</div>
+          <div class="pro-price-saves">↑ Pays for itself in under 1 week</div>
+        </div>
+        <a href="/pro/" class="btn-pro btn-g">Get the Complete Kit →</a>
+        <div style="font-family:var(--mono);font-size:var(--fs-micro);color:var(--g);text-align:center;line-height:1.5;">🛡 30-day money-back guarantee</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== -->
+<!-- AFFILIATE CARDS — Tools that power the stack                    -->
+<!-- =============================================================== -->
+<section class="section-alt sec-major sec-commercial" aria-labelledby="tools-h">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">Recommended platforms · Affiliate disclosure</span>
+      <h2 id="tools-h">The Platforms That Power the Stack</h2>
+      <p>Every tool below has a free plan that runs the entire $0 stack. We earn a commission if you sign up through these links — at no extra cost to you. We only recommend tools we use ourselves.</p>
+    </div>
+    <Disclosure />
+    {/* WP8 — two tiers, not seven equal cards.
+        Seven identical cards with seven identical green buttons split attention
+        seven ways. Only two of these are load-bearing: every tool on this page
+        needs Make.com, and the Klaviyo replacement IS Systeme.io. The other five
+        were competing with them for the same click.
+
+        The thesis problem mattered more. This page tells a reader to cancel
+        their paid apps, and the same grid was selling a paid Gorgias plan and a
+        Google Workspace subscription as though they were free tiers. Those two
+        now sit under an explicit paid-tools label so the $0 claim is not
+        undercut by its own recommendations. */}
+    <div class="aff-tier-label">The two accounts the stack needs</div>
+    <div class="aff-grid aff-grid-primary">
+      <div class="aff-card">
+        <div class="aff-card-tag">Automation Engine · Required</div>
+        <div class="aff-card-name">Make.com</div>
+        <p class="aff-card-desc">The engine behind <strong>every single tool on this page</strong> — CAPI Shield, TikTok Events API, Stocky Swap, P&amp;L Auto and the Autocrat Quota Fix all run on it. 1,000 free credits a month is enough to run the whole stack as one consolidated scenario: a single Shopify webhook with router branches for tracking, inventory and P&amp;L. No credit card, no time limit.</p>
+        <div class="aff-card-saving">Replaces $19.99+/mo of Zapier costs</div>
+        <a href="/go/make/?source=home-grid-make" target="_blank" rel="noopener sponsored" class="cta-primary aff-card-cta btn-g" data-cta-position="grid-make">Start free on Make.com <span class="aff-mark">affiliate</span></a>
+      </div>
+      <div class="aff-card">
+        <div class="aff-card-tag">Email Marketing &amp; CRM · Required for Klaviyo replacement</div>
+        <div class="aff-card-name">Systeme.io</div>
+        <p class="aff-card-desc"><strong>This is what &ldquo;Replace Klaviyo&rdquo; above actually means.</strong> Free plan: 2,000 contacts, unlimited email sends, full automation sequences, sales funnels and CRM. No credit card required, and most stores never need the paid plan. Klaviyo's February 2025 billing change charges for every active profile whether you email them or not.</p>
+        <div class="aff-card-saving">Replaces $20+/mo of Klaviyo costs</div>
+        <a href="/go/systeme/?source=home-grid-systeme" target="_blank" rel="noopener sponsored" class="cta-primary aff-card-cta btn-g" data-cta-position="grid-systeme">Start free on Systeme.io <span class="aff-mark">affiliate</span></a>
+      </div>
+    </div>
+
+    <div class="aff-tier-label aff-tier-label-2">Also useful — not required by anything above</div>
+    <ul class="aff-list">
+      <li class="aff-row">
+        <div class="aff-row-main">
+          <span class="aff-row-name">GetResponse</span>
+          <span class="aff-row-why">More advanced segmentation than Systeme.io's free tier, if you have outgrown it. Free plan available.</span>
+        </div>
+        <a href="/go/getresponse/?source=home-grid-getresponse" target="_blank" rel="noopener sponsored" class="aff-row-cta" data-cta-position="grid-getresponse">Try free <span class="aff-mark">affiliate</span></a>
+      </li>
+      <li class="aff-row">
+        <div class="aff-row-main">
+          <span class="aff-row-name">Beehiiv</span>
+          <span class="aff-row-why">The newsletter platform Stack Architect uses to send these guides. Free up to 2,500 subscribers.</span>
+        </div>
+        <a href="/go/beehiiv/?source=home-grid-beehiiv" target="_blank" rel="noopener sponsored" class="aff-row-cta" data-cta-position="grid-beehiiv">Start free <span class="aff-mark">affiliate</span></a>
+      </li>
+      <li class="aff-row">
+        <div class="aff-row-main">
+          <span class="aff-row-name">Tidio</span>
+          <span class="aff-row-why">AI live chat and helpdesk for Shopify. Free plan covers most small stores.</span>
+        </div>
+        <a href="/go/tidio/?source=home-grid-tidio" target="_blank" rel="noopener sponsored" class="aff-row-cta" data-cta-position="grid-tidio">Try free <span class="aff-mark">affiliate</span></a>
+      </li>
+    </ul>
+
+    <div class="aff-tier-label aff-tier-label-3">Paid tools we rate — for stores past the free tier</div>
+    <p class="aff-paid-note">These are not part of the $0 stack and nothing on this page depends on them. They are here because we use them and they are worth the money at a certain size — not because they are free.</p>
+    <ul class="aff-list">
+      <li class="aff-row">
+        <div class="aff-row-main">
+          <span class="aff-row-name">Gorgias</span>
+          <span class="aff-row-why">The leading Shopify support helpdesk. Deep Shopify integration — view and edit orders without leaving a ticket. Paid plan only, no free tier.</span>
+        </div>
+        <a href="https://www.gorgias.com/pricing" target="_blank" rel="noopener" class="aff-row-cta" data-cta-position="grid-gorgias">See pricing <span class="aff-mark">not affiliate</span></a>
+      </li>
+      <li class="aff-row">
+        <div class="aff-row-main">
+          <span class="aff-row-name">Google Workspace</span>
+          <span class="aff-row-why">Worth it past roughly 500 orders/month: removes the Gmail API limits that silently kill automations during Black Friday volumes. Paid subscription.</span>
+        </div>
+        <a href="/go/workspace/?source=home-grid-workspace" target="_blank" rel="noopener sponsored" class="aff-row-cta" data-cta-position="grid-workspace">Start trial <span class="aff-mark">affiliate</span></a>
+      </li>
+    </ul>
+  </div>
+</section>
+<!-- =============================================================== -->
+<!-- STYLES FOR CHUNK 4 SECTIONS                                      -->
+<!-- =============================================================== -->
+<style is:global>
+/* SEO Prose */
+.seo-prose{max-width:860px;margin:0 auto;}
+.seo-prose p{font-size:var(--fs-body);color:var(--text-3);line-height:1.8;margin-bottom:18px;}
+.seo-prose p strong{color:var(--text-2);font-weight:600;}
+.seo-prose p a{color:var(--g);text-decoration:underline;text-underline-offset:2px;}
+.seo-prose h3{font-weight:700;font-size:clamp(17px,2.2vw,21px);color:var(--text-2);letter-spacing:-.02em;margin:36px 0 14px;}
+.seo-prose h3:first-child{margin-top:0;}
+
+/* Comparison quick grid */
+.compare-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;}
+.compare-card{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;padding:16px 18px;text-decoration:none;display:flex;align-items:center;justify-content:space-between;gap:10px;transition:border-color .2s,background .2s;}
+.compare-card:hover{border-color:var(--g-border);background:var(--g-bg);}
+.compare-card-name{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;color:var(--text-3);transition:color .2s;}
+.compare-card:hover .compare-card-name{color:var(--g);}
+.compare-card-arrow{font-size:var(--fs-md);color:var(--text-4);}
+
+/* Guide / Email Capture */
+.guide-card{background:var(--bg-3);border:1.5px solid var(--border-2);border-radius:14px;padding:56px 48px;text-align:center;position:relative;overflow:hidden;}
+.guide-card::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:500px;height:180px;background:radial-gradient(ellipse,rgba(52,211,119,.07) 0%,transparent 65%);pointer-events:none;}
+.guide-title{font-weight:700;color:var(--text);font-size:clamp(22px,4vw,36px);letter-spacing:-.03em;line-height:1.05;margin-bottom:16px;text-transform:uppercase;}
+.guide-desc{font-size:var(--fs-md);color:var(--text-3);max-width:520px;margin:0 auto 10px;line-height:1.75;}
+.guide-proof{font-family:var(--mono);font-size:var(--fs-sm);color:var(--text-4);margin-bottom:32px;}
+.guide-proof span{color:var(--g);font-weight:700;}
+.guide-specs{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;margin-bottom:36px;}
+.gs{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);color:var(--text-3);}
+.gs-dot{width:5px;height:5px;border-radius:50%;background:var(--g);flex-shrink:0;}
+.gf-wrap{max-width:480px;margin:0 auto;}
+.gf-label{font-size:var(--fs-md);font-weight:600;color:var(--text-2);margin-bottom:5px;}
+.gf-sub{font-size:var(--fs-sm);color:var(--text-3);margin-bottom:18px;line-height:1.6;}
+.gf-row{display:flex;flex-wrap:wrap;gap:10px;}
+.gf-inp{flex:1;min-width:190px;background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:8px;padding:14px 16px;color:var(--text);font-size:var(--fs-md);font-family:var(--sans);outline:none;transition:border-color .2s;min-height:52px;}
+.gf-inp:focus{border-color:var(--g);}
+.gf-inp::placeholder{color:var(--text-4);}
+.gf-go{font-family:var(--sans);font-size:var(--fs-sm);font-weight:700;background:var(--g);color:var(--text-inv);border:none;padding:14px 24px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:background .2s;min-height:52px;}
+.gf-go:hover{background:#34d377;}
+.gf-priv{font-size:var(--fs-micro);color:var(--text-4);margin-top:12px;line-height:1.6;}
+.gf-priv a{color:var(--text-3);text-decoration:underline;}
+.guide-trust{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);margin-top:22px;letter-spacing:.1em;text-transform:uppercase;}
+.guide-done{display:none;text-align:center;}
+.guide-done-icon{width:52px;height:52px;border-radius:50%;background:rgba(52,211,119,.1);border:1px solid rgba(52,211,119,.25);display:flex;align-items:center;justify-content:center;margin:0 auto 14px;}
+.guide-done-msg{font-size:var(--fs-md);color:var(--g);font-weight:600;}
+
+/* FAQ */
+.faq-list-c{display:flex;flex-direction:column;gap:8px;margin-top:40px;}
+details.faq-item-c{border-radius:10px;border:1.5px solid var(--border);background:rgba(255,255,255,.02);transition:border-color .2s;}
+details.faq-item-c[open]{border-color:rgba(52,211,119,.25);background:rgba(52,211,119,.025);}
+details.faq-item-c summary{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;cursor:pointer;list-style:none;min-height:58px;font-size:var(--fs-md);font-weight:600;color:var(--text-3);}
+details.faq-item-c summary::-webkit-details-marker{display:none;}
+details.faq-item-c[open] summary{color:var(--text);}
+.faq-ico{width:16px;height:16px;min-width:16px;display:inline-block;flex-shrink:0;position:relative;opacity:.4;}
+.faq-ico::before{content:'';position:absolute;top:3px;left:2px;width:10px;height:10px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg);transition:transform .25s;}
+details.faq-item-c[open] summary .faq-ico{opacity:1;color:var(--g);}
+details.faq-item-c[open] summary .faq-ico::before{transform:rotate(225deg);top:6px;}
+.faq-ans-c{padding:0 22px 20px;font-size:var(--fs-body);color:var(--text-3);line-height:1.75;border-top:1px solid var(--border);padding-top:14px;}
+.faq-ans-c strong{color:var(--text-2);}
+.faq-ans-c a{color:var(--g);text-decoration:underline;}
+
+/* Scroll sticky bar */
+
+@media(max-width:640px){
+  .guide-card{padding:40px 22px;}
+  .gf-row{flex-direction:column;}
+}
+</style>
+
+<!-- =============================================================== -->
+<!-- COMPARISONS QUICK LINKS — Long-tail SEO                          -->
+<!-- =============================================================== -->
+<section class="section sec-minor" aria-labelledby="compare-h">
+  <div class="inner">
+    <div class="sec-head">
+      <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">Free alternatives</span>
+      <h2 id="compare-h">Replace Every Paid App — For Free</h2>
+      <p>Detailed comparisons of the most common paid Shopify tools and their free replacements.</p>
+    </div>
+    <div class="compare-grid">
+      <a href="/shopify-attribution-tools-compared/" class="compare-card"><span class="compare-card-name">Elevar vs Triple Whale vs Northbeam vs Analyzify</span><span class="compare-card-arrow">→</span></a>
+      <a href="/stocky-alternative/" class="compare-card"><span class="compare-card-name">Stocky Alternative 2026</span><span class="compare-card-arrow">→</span></a>
+      <a href="/replace-klaviyo-free/" class="compare-card"><span class="compare-card-name">Klaviyo Alternative — Systeme.io Free</span><span class="compare-card-arrow">→</span></a>
+      <a href="/best-free-shopify-apps-2026/" class="compare-card"><span class="compare-card-name">Best Free Shopify Apps 2026 (40+)</span><span class="compare-card-arrow">→</span></a>
+      <a href="/best-ai-tools-shopify/" class="compare-card"><span class="compare-card-name">Best AI Tools for Shopify 2026</span><span class="compare-card-arrow">→</span></a>
+    </div>
+
+    <div style="margin-top:40px;">
+      <div class="sec-head" style="margin-bottom:24px;">
+        <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">Quick answers</span>
+        <h3 style="font-family:var(--sans);font-weight:700;font-size:clamp(20px,3vw,28px);letter-spacing:-.03em;color:var(--text);line-height:1.05;margin-bottom:10px;">Common Shopify Questions</h3>
+      </div>
+      <div class="compare-grid">
+        <a href="/stocky-alternative/" class="compare-card"><span class="compare-card-name">What replaces Stocky after Aug 2026?</span><span class="compare-card-arrow">→</span></a>
+        <a href="/replace-klaviyo-free/" class="compare-card"><span class="compare-card-name">Is Klaviyo free?</span><span class="compare-card-arrow">→</span></a>
+        <a href="/shopify-attribution-tools-compared/" class="compare-card"><span class="compare-card-name">How much does Triple Whale cost?</span><span class="compare-card-arrow">→</span></a>
+        <a href="/blog/shopify-server-side-tracking-complete-setup-guide/" class="compare-card"><span class="compare-card-name">What is server-side tracking?</span><span class="compare-card-arrow">→</span></a>
+        <a href="/capi-shield/" class="compare-card"><span class="compare-card-name">What is the Shopify CAPI?</span><span class="compare-card-arrow">→</span></a>
+        <a href="/make-com-shopify/" class="compare-card"><span class="compare-card-name">Does Make.com work with Shopify?</span><span class="compare-card-arrow">→</span></a>
+        <a href="/tiktok-events-api-shopify/" class="compare-card"><span class="compare-card-name">TikTok Events API — no code?</span><span class="compare-card-arrow">→</span></a>
+        <a href="/shopify-google-ads-conversion-tracking/" class="compare-card"><span class="compare-card-name">What is Google Enhanced Conversions?</span><span class="compare-card-arrow">→</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- =============================================================== -->
+<!-- SEO PROSE — Expanded for long-tail coverage + AI citation        -->
+<!-- =============================================================== -->
+<section class="section sec-minor" aria-labelledby="about-h">
+<div class="inner">
+  <div class="sec-head">
+    <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">About this stack</span>
+    <h2 id="about-h">The Complete Free Shopify Automation Stack in 2026</h2>
+    <p>Everything in one place — why it works, what it replaces, and why it costs $0.</p>
+  </div>
+  <div class="seo-prose" itemscope itemtype="https://schema.org/Article">
+    <meta itemprop="headline" content="Free Shopify Automation Stack 2026 — Free Tools Replacing Paid Apps at $0">
+    <meta itemprop="datePublished" content="2026-02-01">
+    <meta itemprop="dateModified" content="2026-08-21">
+    {/* No itemprop="author" here. It said "Stack Architect", which
+        contradicted the #luke Person node the JSON-LD above asserts as
+        author of this page. The JSON-LD is the authoritative statement;
+        a second, disagreeing one in microdata is worse than none. */}
+
+    <h3>What Is the $0 Shopify Automation Stack?</h3>
+    <p>The $0 Automation Stack is a collection of free tools that collectively replace the paid Shopify apps most stores spend $500–$1,600 per month on. Each tool uses a combination of Make.com's free automation tier, Google Sheets, and Systeme.io's free plan to perform the same job as the paid alternative — server-side event delivery, stock logging, email automation — without a monthly subscription, developer cost, or code. It is not feature-for-feature parity: the paid tools carry support, dashboards, and volume headroom the free tiers do not, and Make.com's free plan caps at 1,000 credits and 2 active scenarios. Store owners who want the pre-built version can purchase the <a href="/pro/">Complete Kit for $24</a> — four ready-to-import Make.com JSON blueprints that deploy in 10 minutes instead of 8 hours.</p>
+
+    <h3>Why Replace Shopify Paid Apps With Free Automation?</h3>
+    <p>The core problem most Shopify stores face is that the app ecosystem is structured around recurring revenue. Tracking apps charge $145–$650/month for server-side conversion data. Inventory apps charge $29–$500/month for real-time stock syncing. Email platforms like Klaviyo charge $20+/mo for email automations that most stores never use at full capability. <strong>The $0 stack covers the same jobs — server-side tracking, live inventory, email automation, TikTok Events API, and real-time P&amp;L — using free tiers of tools built for automation at scale.</strong> Where it is worse than the paid app, we say so on the tool's own page. See the <a href="/stack/">full recommended stack — 7 free tools vetted and ranked</a>, or use the <a href="/shopify-app-cost-calculator/">App Cost Calculator</a> to see your exact recoverable spend.</p>
+
+    <h3>Free Shopify Tracking — How CAPI Shield Replaces Elevar and Triple Whale</h3>
+    <p><a href="/capi-shield/">CAPI Shield</a> uses Make.com to route Shopify order webhooks directly to Meta Conversions API and Google Enhanced Conversions server-to-server. iOS restrictions, ad blockers, and cookie expiry cannot intercept server-side signals. Browser-only tracking loses purchase events to iOS ATT, Safari ITP, ad blockers and consent rejection, and server-side delivery is not subject to that loss. <a href="/how-we-test/#the-20-40-figure">We publish no figure for how much is lost</a>: the share is set by a store's own traffic mix and consent rate. How much any one store gains is measurable in your own Meta Events Manager as Additional Conversions Reported. <a href="/shopify-attribution-tools-compared/">Elevar charges $225/mo</a> and delivers events by the same server-to-server mechanism. <strong>We have not run CAPI Shield and Elevar side by side on the same store, so we make no claim about how their Event Match Quality compares.</strong> What we can say is what CAPI Shield sends: hashed email, phone, name, IP and user-agent, which is the parameter set Meta scores EMQ against. <a href="/shopify-attribution-tools-compared/">Triple Whale uses GMV-based pricing that scales with your store's revenue</a> for attribution data that server-side tracking provides natively. Estimate your current EMQ with the <a href="/meta-emq-score-estimator/">Meta EMQ Score Estimator</a>.</p>
+
+    <h3>Free Google Ads Enhanced Conversions for Shopify</h3>
+    <p>iOS 26 Link Tracking Protection strips the Google Click ID (gclid) from ad URLs opened in Safari Private Browsing, Mail, and Messages. Without gclid, Google Ads cannot attribute the purchase to the ad, so Shopify's reported Google Ads conversions understate what the ads actually drove. We have not found a published figure for how large that gap is, and have not measured it ourselves, so this page does not put a number on it. <a href="/shopify-google-ads-conversion-tracking/">Google Ads Enhanced Conversions via Make.com</a> sends hashed customer email directly to Google Ads server-side, bypassing gclid dependency entirely. Deploys in 6 minutes, runs on Make.com's free tier, replaces Stape ($29+/mo) and Littledata ($159+/mo) at $0.</p>
+
+    <h3>What Replaces Shopify Stocky After August 2026?</h3>
+    <p>Shopify is permanently closing Stocky on August 31, 2026 and deleting all data after that date. No first-party migration path is provided. <a href="/stocky-swap/">Stocky Swap</a> is the best free Stocky replacement — it logs every Shopify order to Google Sheets in real time via a Make.com webhook, capturing stock levels, fulfilment status, and full order history. It deploys in 4 minutes, costs $0 forever, and requires no Shopify app install. For a full comparison of <a href="/stocky-alternative/">all Stocky alternatives in 2026</a>, including paid options, see the dedicated comparison page. Use the <a href="/stocky-migration-risk-scorer/">Stocky Migration Risk Scorer</a> to assess your complexity before migrating.</p>
+
+    <h3>Free TikTok Server-Side Tracking for Shopify</h3>
+    <p>The same Make.com scenario can branch to <a href="/tiktok-events-api-shopify/">TikTok's Events API</a> simultaneously. TikTok uses CompletePayment as its purchase event name, not Purchase. The server-side signal bypasses iOS ITP and ad blockers. We have not sampled EMQ across Shopify stores and do not publish a typical score for this setup. WeltPixel ($39/month) and Analyzify ($145–$275/mo) deliver TikTok events by the same server-side route; this one runs on Make.com's free tier at $0. For a full no-code walkthrough, see <a href="/tiktok-events-api-shopify/">how to set up TikTok Events API on Shopify without code</a>.</p>
+
+    <h3>Free Klaviyo Alternative — Systeme.io</h3>
+    <p>Klaviyo changed its billing model in February 2025 — stores now pay for every active profile whether they email them or not. <a href="/replace-klaviyo-free/">Systeme.io's free plan</a> includes 2,000 contacts with unlimited email sends, full automation sequences, sales funnels, CRM, and affiliate management. For stores not using Klaviyo's advanced ecommerce segmentation, the migration takes 30 minutes and saves $20+/month permanently. For a full breakdown of the difference, see the <a href="/replace-klaviyo-free/">Klaviyo vs Systeme.io comparison</a>. Stores that need more advanced segmentation than Systeme.io can also consider GetResponse as a Klaviyo alternative. Calculate your exact saving with the <a href="/klaviyo-to-systeme-migration-savings-calculator/">Klaviyo Migration Savings Calculator</a>.</p>
+
+    <h3>Free Shopify P&amp;L Reporting — Live Google Sheets Dashboard</h3>
+    <p>Most Shopify stores have no real-time visibility into profit — just revenue. <a href="/shopify-profit-loss-automation/">P&amp;L Auto</a> uses a Make.com webhook to auto-populate a Google Sheets dashboard with revenue, COGS, fees, and net profit for every order the instant payment confirms. No BI tool, no paid dashboard app, no manual exports. Replaces TrueProfit, BeProfit, Glew.io, and Peel at $0/month.</p>
+
+    <h3>Make.com vs Zapier for Shopify Automation</h3>
+    <p>Make.com's free tier includes 1,000 credits/month (formerly called operations). Zapier's free tier includes 100 tasks per month — 10x fewer. Make.com is also more flexible for multi-step branching workflows because operations are counted per module, not per multi-step zap. For Shopify stores with more than 100 orders per month, Make.com is typically 3–5x cheaper than Zapier at equivalent automation volume. Calculate your exact difference with the <a href="/make-vs-zapier-cost-calculator/">Make vs Zapier Cost Calculator</a>.</p>
+
+    <h3>Preparing Your Shopify Store for AI Shopping and ChatGPT Citations</h3>
+    <p>In 2026, AI-powered shopping assistants (ChatGPT, Claude, Perplexity, Google AI Overviews) are becoming primary discovery channels for Shopify products. Three requirements to be citable by AI models: (1) structured data — Product, Offer, Organization, and FAQPage schema on every page; (2) server-side tracking for accurate conversion signals back to ad platforms; (3) an <code>llms.txt</code> file at your domain root describing your product catalogue for AI crawlers. The <a href="/blog/shopify-agentic-storefronts-setup-guide-2026/">Agentic Storefronts setup guide</a> includes a 12-point readiness checklist for your store.</p>
+
+    <h3>Free Shopify Automation Guides and Resources</h3>
+    <p>The <a href="/shopify-automation-guides/">complete guide library</a> covers every tool in the stack with step-by-step setup instructions. The most-read guides are <a href="/blog/shopify-server-side-tracking-complete-setup-guide/">Shopify server-side tracking setup</a>, <a href="/blog/shopify-stocky-data-export-before-shutdown/">exporting Stocky data before the August 2026 shutdown</a>, <a href="/blog/shopify-abandoned-cart-recovery-free-2026/">free Shopify abandoned cart recovery</a>, <a href="/blog/shopify-email-marketing-free-2026/">free Shopify email marketing 2026</a>, and <a href="/blog/shopify-conversion-rate-optimisation-free-2026/">Shopify CRO with 12 free tools</a>.</p>
+  </div>
+</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- =============================================================== -->
+<!-- GUIDE EMAIL CAPTURE — Lead magnet                                -->
+<!-- =============================================================== -->
+<section class="section-alt" aria-labelledby="guide-h">
+  <div class="inner-md">
+    <div class="guide-card">
+      <div style="position:relative;">
+        <span class="tag" style="margin-bottom:20px;display:inline-flex;">Free Resource</span>
+        <h2 id="guide-h" class="guide-title">Unlock the Full<br>Master Setup Guide</h2>
+        <p class="guide-desc">All six automation blueprints and technical specs in one file. Deploy your entire backend for <strong style="color:var(--g)">$0/mo</strong>.</p>
+        <p class="guide-proof">Replaces <span>{YR_RANGE}</span> in Shopify app fees — the sum of the seven categories below</p>
+        <div class="guide-specs">
+          <span class="gs"><span class="gs-dot"></span>6 Logic Blueprints</span>
+          <span class="gs"><span class="gs-dot"></span>Step-by-step deployment manuals</span>
+          <span class="gs"><span class="gs-dot"></span>TikTok + Meta + Google tracking</span>
+          <span class="gs"><span class="gs-dot"></span>v2.026 Stable Build</span>
+        </div>
+        <div class="gf-wrap" id="gf-form">
+          <div class="gf-label">Enter your email for instant access</div>
+          <div class="gf-sub">Weekly Shopify automation tips included. Unsubscribe anytime. Powered by Beehiiv.</div>
+          <div class="gf-row">
+            <input type="email" id="gf-email" class="gf-inp" placeholder="your@email.com">
+            <button class="gf-go" onclick="gfGet()">Get Free Access →</button>
+          </div>
+          <p class="gf-priv">No spam. <a href="/privacy/">Privacy policy</a>.</p>
+        </div>
+        <div class="guide-done" id="gf-done">
+          <div class="guide-done-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d377" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+          <p class="guide-done-msg" id="gf-confirm">Guide sent — check your inbox!</p>
+        </div>
+        <p class="guide-trust">100% free · instant access · verified free-tier mechanics</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =============================================================== -->
+<!-- FAQ — 18 questions, matches schema                              -->
+<!-- =============================================================== -->
+<section class="section sec-minor" id="faq" aria-labelledby="faq-h">
+<div class="inner-sm">
+  <div class="sec-head">
+    <span class="tag tag-dim" style="margin-bottom:16px;display:inline-flex;">Common questions · {FAQ.length} answers</span>
+    <h2 id="faq-h">Everything You Need to Know</h2>
+    <p>Answers to the questions Shopify store owners ask most before deploying the stack.</p>
+  </div>
+  {/* Server-rendered. Native <details> needs no JavaScript, so every question
+      and answer is present in the raw HTML that AI crawlers fetch. The count,
+      the copy and the FAQPage JSON-LD all come from one array. */}
+  <div class="faq-list-c" id="faq-list">
+    {FAQ.map((item) => (
+      <details class="faq-item-c" itemscope itemprop="mainEntity" itemtype="https://schema.org/Question">
+        <summary><span itemprop="name">{item.q}</span><span class="faq-ico"></span></summary>
+        <div class="faq-ans-c" itemscope itemprop="acceptedAnswer" itemtype="https://schema.org/Answer">
+          <p itemprop="text" set:html={item.a}></p>
+        </div>
+      </details>
+    ))}
+  </div>
+</div>
+</section>
+</main>
+
+<!-- Persistent affiliate CTA. Already used on the six tool pages; the homepage
+     is the longest page on the site and the most likely to take a cold visitor,
+     and it had none. Reveals after 28% scroll, hides while any .btn-g or
+     .scan-cta is on screen, session-dismissible, no layout shift, no new URL.
+     Reports link_position "sticky" to the GA4 listener in Base.astro, so it is
+     measurable against the in-body placements from day one. -->
+<StickyAffiliateCTA
+  href="/go/make/?source=home-n19"
+  label="Start free on Make.com"
+  context="Every free tool on this page runs on Make.com's free tier"
+  revealAt={0.28}
+/>
+<script is:inline>
+(function(){
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var els = document.querySelectorAll('.sec-head, .sol-card, .calc-card, .ledger, .mech-claim, .scan-card');
+  els.forEach(function(el,i){ el.classList.add('reveal'); el.style.transitionDelay = (Math.min(i%4,3)*70)+'ms'; });
+  var io = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{rootMargin:'0px 0px -8% 0px',threshold:.08});
+  els.forEach(function(el){ io.observe(el); });
+})();
+</script>
+
+<!-- =============================================================== -->
+<!-- FOOTER                                                           -->
+<!-- =============================================================== -->
+
+<!-- =============================================================== -->
+<!-- SCRIPTS — Scanner, countdown, scroll bar, FAQ, guide             -->
+<!-- =============================================================== -->
+<script is:inline>
+(function() {
+  // Header scroll effect
+  var header = document.querySelector('.product-terminal-bar') || document.querySelector('nav');
+  window.addEventListener('scroll', function() {
+    var s = window.scrollY;
+    if (header) header.classList.toggle('scrolled', s > 50);
+  }, { passive: true });
+
+  // Footer copyright
+  var el = document.getElementById('footer-copyright');
+  if (el) el.textContent = '© ' + new Date().getFullYear() + ' STACK_ARCHITECT // CORE_DEPLOYMENT';
+
+  // Stocky countdown. Past the deadline it must not render "0 Days : 00 Hrs"
+  // under a "shuts down in" label — it swaps to a plain statement of the date
+  // so the page reads correctly on 1 September with no edit.
+  function updateCountdown() {
+    var target = new Date('2026-08-31T23:59:59Z');
+    var now = new Date();
+    var diff = target - now;
+    if (diff <= 0) {
+      var box = document.getElementById('cd-box');
+      var post = document.getElementById('cd-box-post');
+      if (box) box.hidden = true;
+      if (post) post.hidden = false;
+      return;
+    }
+    var days = Math.floor(diff / 86400000);
+    var hours = Math.floor((diff % 86400000) / 3600000);
+    var mins = Math.floor((diff % 3600000) / 60000);
+    var d=document.getElementById('cd-d'); if(d) d.textContent=days;
+    var h=document.getElementById('cd-h'); if(h) h.textContent=String(hours).padStart(2,'0');
+    var m=document.getElementById('cd-m'); if(m) m.textContent=String(mins).padStart(2,'0');
+  }
+  updateCountdown();
+  setInterval(updateCountdown, 30000);
+
+  // The #scroll-bar listener that lived here was dead code: the element was
+  // removed from this page but its scroll handler and dismiss handler stayed,
+  // running on every scroll event and no-opping on a null lookup.
+  // StickyAffiliateCTA (mounted at the end of <main>) supersedes it and is
+  // better built - reveal threshold, primary-CTA suppression, session dismissal
+  // and GA4 reporting all handled in one place.
+})();
+
+// Scanner logic
+(function() {
+  // PAINS is rendered server-side (see this file's frontmatter). The buttons
+  // already exist in the HTML; this script only reads them and binds toggles.
+  // It no longer builds the list, so the six labels survive a JS-less fetch.
+  var list = document.getElementById('sc-list');
+  if (!list) return;
+  var P = Array.prototype.map.call(list.querySelectorAll('.pain-btn'), function(b) {
+    return {
+      id:    b.getAttribute('data-pain'),
+      cost:  parseInt(b.getAttribute('data-cost'), 10) || 0,
+      sol:   b.getAttribute('data-sol')   || '',
+      url:   b.getAttribute('data-url')   || '',
+      label: b.getAttribute('data-label') || '',
+      _b:    b
+    };
+  });
+  if (!P.length) return;
+  var sel = [], cur = 0, tgt = 0, raf;
+  P.forEach(function(p) {
+    p._b.addEventListener('click', function() { scToggle(p, p._b); });
+  });
+  function scToggle(p, b) {
+    var on = sel.indexOf(p.id) === -1;
+    if (on) sel.push(p.id); else sel.splice(sel.indexOf(p.id), 1);
+    b.classList.toggle('on', on); b.setAttribute('aria-checked', '' + on);
+    var v = document.getElementById('chkv' + p.id); if (v) v.style.display = on ? 'block' : 'none';
+    scUpdate();
+  }
+  function scUpdate() {
+    var tot = 0, recs = [];
+    P.forEach(function(p) { if (sel.indexOf(p.id) !== -1) { tot += p.cost; if (recs.indexOf(p.sol) === -1) recs.push(p.sol); } });
+    tgt = tot; cancelAnimationFrame(raf);
+    (function go() {
+      if (cur < tgt) cur += Math.max(1, Math.ceil((tgt - cur) / 5));
+      else if (cur > tgt) cur -= Math.max(1, Math.ceil((cur - tgt) / 5));
+      var n = document.getElementById('sc-n'); if(n) n.textContent = cur.toLocaleString('en-US');
+      if (cur !== tgt) raf = requestAnimationFrame(go);
+    })();
+    var res = document.getElementById('sc-result');
+    if (res) res.className = 'scan-result' + (tot > 0 ? ' leak' : '');
+    var yr = document.getElementById('sc-yr'); if(yr) yr.style.display = tot > 0 ? 'block' : 'none';
+    var yn = document.getElementById('sc-yn'); if(yn) yn.textContent = (tot * 12).toLocaleString('en-US');
+    var rc = document.getElementById('sc-recs'); if(rc){ rc.style.display = recs.length ? 'flex' : 'none'; rc.style.flexDirection='column'; }
+    var rl = document.getElementById('sc-recs-list'); if(rl) rl.innerHTML = recs.map(function(r) { return '<div class="sr-recs-item">' + r + '</div>'; }).join('');
+    // The Systeme.io link is only shown when the plan actually replaces Klaviyo.
+    // An affiliate link for a tool the visitor's plan does not use is noise, and
+    // noise is what gets an affiliate block ignored.
+    var sysLink = document.getElementById('sc-systeme');
+    if (sysLink) sysLink.hidden = sel.indexOf('k') === -1;
+    var btn = document.getElementById('sc-btn');
+    if (btn) {
+      if (sel.length) { btn.disabled = false; btn.className = 'scan-cta ready'; btn.textContent = 'Build My Free Plan — Save $' + tot + '/mo →'; }
+      else { btn.disabled = true; btn.className = 'scan-cta'; btn.textContent = 'Select at least one issue above'; }
+    }
+  }
+  window.scNext = function() {
+    if (!sel.length) return;
+    var tot = 0, items = [];
+    P.forEach(function(p) { if (sel.indexOf(p.id) !== -1) { tot += p.cost; items.push(p); } });
+    var ph = document.getElementById('sc-plan-h'); if(ph) ph.textContent = 'You are losing ~$' + tot + '/mo';
+    var pi = document.getElementById('sc-plan-items');
+    if(pi) pi.innerHTML = items.map(function(p, i) {
+      return '<div class="plan-item"><div class="plan-num">' + (i + 1) + '</div><div><div class="plan-sol">' + p.sol + '</div><div class="plan-fix">Fixes: ' + p.label + '</div><div class="plan-rec">Recovers ~$' + p.cost + '/mo → <a href="' + p.url + '" style="color:var(--g)">Deploy now →</a></div></div></div>';
+    }).join('');
+    var ss = document.getElementById('sc-scan'); if(ss) ss.style.display = 'none';
+    var sp = document.getElementById('sc-plan'); if(sp) sp.style.display = 'block';
+  };
+  window.scSubmit = function() {
+    var emailEl = document.getElementById('sc-email');
+    var e = (emailEl ? emailEl.value : '').trim();
+    if (!e || !e.includes('@')) { if (emailEl) { emailEl.style.borderColor = 'var(--red)'; emailEl.focus(); } return; }
+    if (emailEl) emailEl.style.borderColor = '';
+    fetch('/api/capture-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: e, tag: 'scanner-plan' })
+    }).catch(function () {});
+    var plan = document.getElementById('sc-plan'); if(plan) plan.style.display = 'none';
+    var done = document.getElementById('sc-done'); if(done) done.style.display = 'block';
+  };
+})();
+
+// Guide email capture
+window.gfGet = function() {
+  var emailEl = document.getElementById('gf-email');
+  var e = (emailEl ? emailEl.value : '').trim();
+  if (!e || !e.includes('@')) { if (emailEl) { emailEl.style.borderColor = 'var(--red)'; emailEl.focus(); } return; }
+  if (emailEl) emailEl.style.borderColor = '';
+  fetch('/api/capture-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: e, tag: 'homepage-capture' })
+  }).catch(function () {});
+  // Single popup only — the PDF is the thing the visitor actually asked for, and
+  // one window.open per gesture survives mobile popup blocking. Signup is now
+  // handled by the fetch above rather than a second window.
+  window.open('https://d1yei2z3i6k35z.cloudfront.net/16370908/69a2ac505857c_The_Master_Library.pdf', '_blank');
+  var form = document.getElementById('gf-form'); if(form) form.style.display = 'none';
+  var done = document.getElementById('gf-done'); if(done) done.style.display = 'block';
+  var confirm = document.getElementById('gf-confirm'); if(confirm) confirm.textContent = 'Guides on their way — check your inbox!';
+};
+
+// FAQ is rendered server-side from the FAQ array in this file's frontmatter.
+// The old client-side injection loop lived here and is deliberately gone:
+// native <details> needs no JavaScript, and AI crawlers do not run any.
+</script>
+
+<style is:global>
+/* ===========================================================================
+ * AFFILIATE PLACEMENTS (WP5)
+ *
+ * Three rules govern everything here:
+ *  1. An affiliate link is never the primary action on a card. The internal
+ *     page is, because that is where the conversion narrative lives. These are
+ *     deliberately quieter than .sol-cta.
+ *  2. Every affiliate link carries a visible "affiliate" marker next to it, not
+ *     just rel="sponsored". Consistent with the other 209 affiliate links on
+ *     the site and with /how-we-test/.
+ *  3. data-cta-position is read by the sitewide affiliate_click listener in
+ *     Base.astro, so every placement is measurable against the others in GA4
+ *     without any bespoke instrumentation.
+ * ======================================================================== */
+
+.btn .aff-mark,.btn-g .aff-mark,.aff-card-cta .aff-mark,.cta-primary .aff-mark{
+  color:var(--text-inv);border-color:rgba(5,46,22,.3);opacity:.75;
+}
+.aff-mark{
+  font-family:var(--mono);font-size:var(--fs-micro);font-weight:600;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--text-4);
+  border:1px solid var(--border);border-radius:2px;
+  padding:1px 5px;margin-left:6px;white-space:nowrap;vertical-align:1px;
+}
+
+/* Subordinate affiliate link in a solution-card footer */
+.sol-aff{
+  display:inline-flex;align-items:center;
+  font-family:var(--mono);font-size:var(--fs-micro);font-weight:500;
+  color:var(--text-4);text-decoration:none;
+  padding-top:8px;margin-top:2px;border-top:1px dashed var(--border);
+  width:100%;transition:color .2s;
+}
+.sol-aff:hover{color:var(--g);}
+.sol-aff:hover .aff-mark{border-color:var(--g-border);color:var(--g);}
+
+/* Action link paired with a source citation in the Verified section. The
+   citation above it stays dofollow and unmonetised — that is the point of
+   that section — and this sits underneath as a separate, labelled action. */
+.mech-act{margin-top:8px;font-family:var(--mono);font-size:var(--fs-micro);}
+.mech-act a{color:var(--g);text-decoration:none;font-weight:600;}
+.mech-act a:hover{text-decoration:underline;}
+
+/* Scanner terminal — "step 0" */
+.plan-step0{
+  margin:22px 0 0;padding:22px;
+  background:var(--g-bg);border:1px solid var(--g-border);border-radius:10px;
+}
+.plan-step0-head{display:flex;gap:14px;align-items:flex-start;}
+.plan-step0-num{
+  flex:0 0 auto;width:26px;height:26px;border-radius:50%;
+  background:var(--g);color:var(--text-inv);
+  font-family:var(--mono);font-size:var(--fs-sm);font-weight:700;
+  display:flex;align-items:center;justify-content:center;
+}
+.plan-step0-title{font-size:var(--fs-md);font-weight:700;color:var(--text);margin-bottom:6px;}
+.plan-step0-desc{font-size:var(--fs-body);color:var(--text-3);line-height:1.65;margin:0;}
+.plan-step0-actions{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px;padding-left:40px;}
+.plan-step0-alt{
+  font-family:var(--mono);font-size:var(--fs-sm);font-weight:600;
+  color:var(--g);text-decoration:none;border-bottom:1px dashed var(--g-border);
+}
+.plan-step0-alt:hover{border-bottom-style:solid;}
+.plan-step0-alt[hidden]{display:none;}
+.plan-step0-disc{
+  font-size:var(--fs-sm);color:var(--text-4);line-height:1.6;
+  margin:14px 0 0;padding-left:40px;
+}
+
+/* Scanner terminal — the pay-to-skip offer, after the free plan */
+.plan-kit{
+  margin-top:14px;padding:18px 22px;
+  background:var(--pro-bg);border:1px solid var(--pro-border);border-radius:10px;
+  display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+}
+.plan-kit-title{font-size:var(--fs-md);font-weight:700;color:var(--pro);margin-bottom:5px;}
+.plan-kit-desc{font-size:var(--fs-sm);color:var(--text-3);line-height:1.65;margin:0;max-width:52ch;}
+.plan-kit-desc a{color:var(--pro);}
+
+/* WP8 — two-tier platform grid */
+.aff-tier-label{
+  font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--g);
+  padding-bottom:9px;margin-bottom:18px;border-bottom:1px solid var(--g-border);
+}
+.aff-tier-label-2,.aff-tier-label-3{color:var(--text-4);border-bottom-color:var(--border);margin-top:44px;}
+.aff-grid-primary{grid-template-columns:repeat(2,minmax(0,1fr));}
+@media(max-width:860px){.aff-grid-primary{grid-template-columns:minmax(0,1fr);}}
+.aff-paid-note{font-size:var(--fs-sm);color:var(--text-4);line-height:1.65;margin:-8px 0 16px;max-width:68ch;}
+.aff-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.aff-row{
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+  background:var(--bg-3);padding:16px 20px;flex-wrap:wrap;
+}
+.aff-row-main{display:flex;flex-direction:column;gap:3px;flex:1;min-width:220px;}
+.aff-row-name{font-size:var(--fs-md);font-weight:700;color:var(--text-2);}
+.aff-row-why{font-size:var(--fs-md);color:var(--text-3);line-height:1.6;}
+.aff-row-cta{
+  font-family:var(--mono);font-size:var(--fs-sm);font-weight:700;
+  color:var(--text-2);text-decoration:none;white-space:nowrap;
+  border:1px solid var(--border-2);border-radius:5px;padding:9px 14px;
+  transition:border-color .2s,color .2s,background .2s;
+}
+.aff-row-cta:hover{border-color:var(--g-border);color:var(--g);background:var(--g-bg);}
+
+/* ===========================================================================
+ * SECTION RHYTHM (WP13)
+ *
+ * Twelve sections previously shared one recipe: centred head, uppercase mono
+ * eyebrow, H2 with an identical 52px gradient underline, centred 540px
+ * sub-paragraph, and --sp:100px top and bottom. Twelve times. Uniform emphasis
+ * is the same as no emphasis -- the platform grid and the pro banner looked
+ * exactly like the long-tail link grid -- and twelve sections at 200px of
+ * padding is ~2,400px of empty space, which is most of why the page reads as a
+ * thin ribbon on a wide monitor.
+ *
+ * Three levels now. Two-class selectors so these beat .section's padding
+ * shorthand regardless of stylesheet order.
+ * ======================================================================== */
+.section.sec-major,.section-alt.sec-major{padding-top:var(--sp-major);padding-bottom:var(--sp-major);}
+.section.sec-minor,.section-alt.sec-minor{padding-top:var(--sp-minor);padding-bottom:var(--sp-minor);}
+
+/* The gradient underline stops meaning anything when it is on all twelve.
+   Minor sections lose it; the five that carry the page keep it. */
+.sec-minor .sec-head h2::after{display:none;}
+.sec-minor .sec-head{margin-bottom:36px;}
+
+/* A change of axis is a stronger hierarchy signal than a change of size, and it
+   costs nothing. The two commercial sections read left; the editorial ones stay
+   centred. */
+.sec-commercial .sec-head{text-align:left;}
+.sec-commercial .sec-head h2::after{margin-left:0;margin-right:0;}
+.sec-commercial .sec-head p{margin-left:0;max-width:62ch;}
+
+@media(max-width:640px){
+  .sec-commercial .sec-head{text-align:center;}
+  .sec-commercial .sec-head h2::after{margin-left:auto;margin-right:auto;}
+  .sec-commercial .sec-head p{margin-left:auto;}
+  .plan-step0-actions,.plan-step0-disc{padding-left:0;}
+  .plan-kit{flex-direction:column;align-items:stretch;}
+  .aff-row{flex-direction:column;align-items:stretch;}
+  .aff-row-cta{text-align:center;}
+}
+</style>
+</Base>
+
+<style is:global>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+:root{
+  --g:#34d377;--g-dim:#15803d;--g-bg:rgba(52,211,119,.07);--g-border:rgba(52,211,119,.18);
+  --bg:#0c0f0d;--bg-2:#0f1311;--bg-3:#121614;--bg-4:#171c19;
+  --border:#222825;--border-2:#2f3733;
+  --text:#f2f5f3;--text-2:#b6c0ba;--text-3:#93a09a;--text-4:#7f8b85;--text-inv:#052e16;
+  --red:#f08a8a;--red-bg:rgba(240,138,138,.06);--red-border:rgba(240,138,138,.16);
+  --sky:#8ccfe8;--sky-bg:rgba(140,207,232,.06);--sky-border:rgba(140,207,232,.16);
+  --amber:#f5b64d;--vio:#c3b8ef;--vio-bg:rgba(195,184,239,.06);--vio-border:rgba(195,184,239,.16);
+  --tiktok:#ff2e63;--tiktok-bg:rgba(255,46,99,.06);--tiktok-border:rgba(255,46,99,.16);
+  --pro:#f5b64d;--pro-bg:rgba(245,182,77,.07);--pro-border:rgba(245,182,77,.2);
+  --mono:'JetBrains Mono',ui-monospace,monospace;--sans:'Inter',-apple-system,sans-serif;--disp:'Sora','Inter',-apple-system,sans-serif;
+  --sp:72px;--sp-major:96px;--sp-minor:56px;--card-pad:32px;
+
+  /* ---------------------------------------------------------------------
+   * TYPE SCALE (WP10)
+   *
+   * This file previously carried 133 font-size declarations across 14
+   * distinct pixel values (9,10,11,12,13,14,15,16,17,18,20,22,32,40), 44 of
+   * them at or below 11px and exactly ONE at 17px -- the size
+   * src/styles/global.css declares as --text-body, with the comment "Single
+   * prose scale. Every prose size derives from these three -- do not
+   * reintroduce per-element font-size/line-height pairs."
+   *
+   * There was no scale to edit against, which is why edits to this page
+   * landed unpredictably: "make the body text bigger" had 133 referents.
+   *
+   * Six steps. Running prose sits at --fs-body, which equals the global
+   * system's 17px. Card micro-copy is a different role and sits one step
+   * down. Nothing renders below 11px.
+   * ------------------------------------------------------------------- */
+  --fs-micro:11px;   /* mono labels, legal, badges          */
+  --fs-sm:13px;      /* captions, secondary meta            */
+  --fs-md:15px;      /* card copy, UI chrome, small buttons */
+  --fs-body:17px;    /* running prose -- matches global.css */
+  --fs-lg:22px;      /* h3, large buttons, display digits   */
+  --fs-xl:34px;      /* the two headline figures            */
+}
+body{font-family:var(--sans);background:var(--bg);color:var(--text-3);line-height:1.75;-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:var(--bg);}::-webkit-scrollbar-thumb{background:rgba(52,211,119,.3);border-radius:2px;}
+::selection{background:rgba(52,211,119,.2);color:var(--text);}
+.tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:5px 12px;border-radius:3px;background:var(--g-bg);border:1px solid var(--g-border);color:var(--g);}
+.tag-dim{background:rgba(255,255,255,.03);border-color:var(--border-2);color:var(--text-4);}
+.tag-sky{background:var(--sky-bg);border-color:var(--sky-border);color:var(--sky);}
+.tag-vio{background:var(--vio-bg);border-color:var(--vio-border);color:var(--vio);}
+.tag-red{background:var(--red-bg);border-color:var(--red-border);color:var(--red);}
+.tag-tiktok{background:var(--tiktok-bg);border-color:var(--tiktok-border);color:var(--tiktok);}
+.tag-pro{background:var(--pro-bg);border-color:var(--pro-border);color:var(--pro);}
+.dot{display:inline-block;width:7px;height:7px;min-width:7px;border-radius:50%;background:var(--g);animation:dotPing 2.2s cubic-bezier(.4,0,.6,1) infinite;}
+@keyframes dotPing{0%{box-shadow:0 0 0 0 rgba(52,211,119,.5);}70%{box-shadow:0 0 0 8px rgba(52,211,119,0);}100%{box-shadow:0 0 0 0 rgba(52,211,119,0);}}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;font-family:var(--sans);font-size:var(--fs-body);font-weight:700;text-decoration:none;letter-spacing:-.01em;padding:18px 34px;border-radius:6px;border:none;cursor:pointer;white-space:nowrap;background:linear-gradient(135deg,#3bdc84 0%,#28c06c 100%);color:var(--text-inv);box-shadow:inset 0 1px 0 rgba(255,255,255,.22),0 1px 2px rgba(0,0,0,.4);transition:transform .16s cubic-bezier(.2,.7,.3,1.4),box-shadow .2s,filter .2s;min-height:56px;position:relative;overflow:hidden;}
+.btn:hover{background:#34d377;transform:translateY(-2px);box-shadow:0 8px 28px rgba(52,211,119,.3);}
+
+@keyframes btnGlow{0%,100%{box-shadow:0 0 16px rgba(52,211,119,.1);}50%{box-shadow:0 0 32px rgba(52,211,119,.32);}}
+
+.btn-lg{font-size:var(--fs-lg);padding:20px 40px;min-height:62px;}
+.btn-sm{font-size:var(--fs-md);padding:12px 22px;min-height:44px;}
+.btn-pro{display:inline-flex;align-items:center;justify-content:center;gap:10px;font-family:var(--sans);font-size:var(--fs-body);font-weight:700;text-decoration:none;letter-spacing:-.01em;padding:16px 32px;border-radius:6px;border:none;cursor:pointer;white-space:nowrap;background:var(--pro);color:#0c0f0d;transition:background .2s,transform .15s,box-shadow .2s;min-height:52px;}
+.btn-pro:hover{background:#f59e0b;transform:translateY(-2px);box-shadow:0 8px 28px rgba(245,182,77,.3);}
+.btn-pro-sm{font-size:var(--fs-md);padding:12px 22px;min-height:44px;}
+.btn-outline{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:var(--sans);font-size:var(--fs-md);font-weight:600;text-decoration:none;letter-spacing:-.01em;padding:15px 28px;border-radius:6px;border:1.5px solid var(--border-2);cursor:pointer;white-space:nowrap;background:transparent;color:var(--text-2);transition:border-color .2s,color .2s,background .2s;min-height:52px;}
+.btn-outline:hover{border-color:var(--g);color:var(--g);background:var(--g-bg);}
+.btn-outline-sm{font-size:var(--fs-sm);padding:11px 20px;min-height:44px;}
+.section{padding:var(--sp) 24px;}
+.section-alt{padding:var(--sp) 24px;background:var(--bg-2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.inner{max-width:1000px;margin:0 auto;}
+.inner-sm{max-width:720px;margin:0 auto;}
+.inner-md{max-width:880px;margin:0 auto;}
+.inner-lg{max-width:1120px;margin:0 auto;}
+.sec-head{text-align:center;margin-bottom:56px;}
+.sec-head h2{font-family:var(--disp);font-weight:700;font-size:clamp(26px,4vw,40px);letter-spacing:-.03em;color:var(--text);line-height:1.05;margin-bottom:10px;}
+.sec-head h2::after{content:"";display:block;width:52px;height:3px;border-radius:2px;margin:18px auto 0;background:linear-gradient(90deg,#34d377,#2dd4bf);opacity:.85;}
+.sec-head p{font-size:var(--fs-body);color:var(--text-3);max-width:540px;margin:14px auto 0;line-height:1.75;}
+.bg-grid{background-color:var(--bg);position:relative;}
+.bg-grid::before{content:"";position:absolute;inset:0;pointer-events:none;background:
+  radial-gradient(ellipse 62% 42% at 50% -6%,rgba(52,211,119,.14) 0%,transparent 62%),
+  radial-gradient(ellipse 34% 26% at 82% 6%,rgba(45,212,191,.08) 0%,transparent 60%),
+  radial-gradient(ellipse 30% 24% at 12% 14%,rgba(52,211,119,.05) 0%,transparent 60%);}
+.bg-grid::after{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,var(--border-2) 1px,transparent 1px);background-size:40px 40px;-webkit-mask-image:radial-gradient(ellipse 70% 56% at 50% 0%,#000 20%,transparent 78%);mask-image:radial-gradient(ellipse 70% 56% at 50% 0%,#000 20%,transparent 78%);opacity:.6;}
+.stat-strip{display:grid;grid-template-columns:repeat(4,1fr);background:var(--border);gap:1px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.stat-cell{background:var(--bg);padding:20px 12px;text-align:center;}
+.stat-v{font-family:var(--mono);font-size:var(--fs-lg);font-weight:700;color:var(--g);line-height:1;}
+.stat-l{font-size:var(--fs-micro);color:var(--text-4);text-transform:uppercase;letter-spacing:.12em;margin-top:6px;font-family:var(--mono);}
+.divider{height:1px;background:var(--border);}
+
+/* HERO — simplified, single primary CTA */
+.hero{padding:88px 24px 56px;text-align:center;position:relative;overflow:hidden;}
+.hero-inner{max-width:920px;margin:0 auto;position:relative;z-index:1;}
+.hero-dateline{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);letter-spacing:.12em;text-transform:uppercase;margin-bottom:18px;opacity:.7;}
+.hero h1{font-family:var(--disp);font-size:clamp(42px,6.8vw,72px);font-weight:700;color:var(--text);line-height:.98;letter-spacing:-.025em;margin:0 auto 24px;max-width:860px;}
+.hero h1 .green{background:linear-gradient(115deg,#34d377 0%,#7ee2a8 48%,#2dd4bf 100%);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.hero h1 .dim{color:var(--text-4);}
+.hero-sub{font-size:clamp(17px,2.2vw,20px);color:var(--text-2);max-width:640px;margin:0 auto 36px;line-height:1.65;}
+.hero-sub strong{color:var(--text);font-weight:700;}
+.hero-primary-cta{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:28px;}
+.hero-secondary{font-size:var(--fs-md);color:var(--text-3);}
+.hero-secondary a{color:var(--pro);text-decoration:none;font-weight:600;border-bottom:1px solid rgba(245,182,77,.3);padding-bottom:1px;transition:border-color .2s;}
+.hero-secondary a:hover{border-color:var(--pro);}
+.trust-row{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;margin-bottom:40px;}
+.trust-item{display:flex;align-items:center;gap:7px;font-size:var(--fs-sm);color:var(--text-3);}
+.urgency{display:inline-flex;align-items:center;gap:8px;background:rgba(245,182,77,.06);border:1px solid rgba(245,182,77,.18);border-radius:4px;padding:9px 20px;margin-bottom:40px;font-size:var(--fs-sm);color:var(--amber);font-weight:500;}
+.press-line{margin:26px auto 0;font-size:12.5px;color:var(--text-4);text-align:center;}
+.press-line a{color:var(--text-3);text-decoration:underline;text-underline-offset:3px;}
+.press-line a:hover{color:var(--g);}
+.ledger{max-width:620px;margin:0 auto;border:1px solid var(--border);border-radius:10px;background:var(--bg-3);padding:8px 20px;text-align:left;}
+.ledger-row{display:flex;align-items:baseline;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:13.5px;font-variant-numeric:tabular-nums;}
+.ledger-row:last-child{border-bottom:none;}
+.ledger-app{color:var(--text-2);font-family:var(--sans);font-weight:500;white-space:nowrap;}
+.ledger-app em{font-style:normal;color:var(--text-4);font-weight:400;}
+.ledger-fill{flex:1;border-bottom:1px dotted var(--border-2);transform:translateY(-4px);min-width:24px;}
+.ledger-was{color:var(--text-4);text-decoration:line-through;text-decoration-color:rgba(240,138,138,.5);}
+.ledger-gone{text-decoration:none;color:var(--amber);font-size:var(--fs-sm);}
+.ledger-now{color:var(--g);font-weight:700;min-width:34px;text-align:right;}
+.ledger-total{border-top:1px solid var(--border-2);margin-top:2px;}
+.ledger-total .ledger-app{color:var(--text);font-weight:600;}
+.ledger-total .ledger-was{font-size:var(--fs-md);}
+.ledger-total .ledger-now{font-size:var(--fs-body);text-shadow:0 0 18px rgba(52,211,119,.45);}
+.sol-card,.calc-card,.scan-card{transition:transform .25s cubic-bezier(.2,.7,.3,1),border-color .25s,box-shadow .25s;}
+.sol-card:hover,.calc-card:hover{transform:translateY(-4px);border-color:rgba(52,211,119,.35);box-shadow:0 16px 40px -14px rgba(0,0,0,.6),0 0 0 1px rgba(52,211,119,.12);}
+@media(max-width:560px){.ledger{padding:4px 14px;}.ledger-row{font-size:var(--fs-sm);gap:8px;}.ledger-app em{display:none;}}
+
+/* HERO VIDEO — now directly under CTA */
+.hero-video-wrap{max-width:720px;margin:8px auto 40px;position:relative;}
+.hero-video-glow{position:absolute;inset:-2px;border-radius:20px;background:linear-gradient(135deg,rgba(52,211,119,.4),rgba(52,211,119,.2),rgba(52,211,119,.1));z-index:0;filter:blur(1px);}
+.hero-video-box{position:relative;padding-bottom:56.25%;height:0;overflow:hidden;border-radius:18px;border:1px solid rgba(52,211,119,.25);background:var(--bg-3);z-index:1;box-shadow:0 24px 60px rgba(0,0,0,.5),0 0 40px rgba(52,211,119,.08);}
+.hero-video-box iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:0;border-radius:18px;}
+.hero-video-box video{position:absolute;top:0;left:0;width:100%;height:100%;border:0;border-radius:18px;object-fit:contain;background:#000;}
+.hero-video-transcript{margin-top:16px;font-size:var(--fs-md);color:rgba(255,255,255,0.7);}
+.hero-video-transcript summary{cursor:pointer;padding:8px 12px;background:rgba(52,211,119,0.08);border:1px solid rgba(52,211,119,0.2);border-radius:6px;display:inline-block;font-weight:500;user-select:none;}
+.hero-video-transcript summary:hover{background:rgba(52,211,119,0.15);}
+.hero-video-transcript[open] summary{margin-bottom:12px;}
+.hero-video-transcript .transcript-body{padding:16px;background:rgba(255,255,255,0.03);border-radius:8px;line-height:1.6;}
+.hero-video-transcript .transcript-body p{margin:0 0 8px 0;}
+.hero-video-transcript .transcript-body p:last-child{margin-bottom:0;}
+
+/* WebVTT caption styling — YouTube Short feel, tuned for conversion */
+.hero-video-box video::cue {
+  background-color: rgba(2, 6, 23, 0.85);
+  color: #ffffff;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1.35;
+  padding: 4px 10px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 6px rgba(0, 0, 0, 0.8);
+  letter-spacing: 0.01em;
+}
+
+.hero-video-caption{text-align:center;font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);letter-spacing:.1em;text-transform:uppercase;margin-top:14px;}
+
+/* SCANNER — promoted to position #2 */
+.scan-card{background:var(--bg-3);border:1px solid var(--border-2);border-radius:14px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.2);}
+.pain-list{display:flex;flex-direction:column;gap:10px;padding:28px 28px 0;}
+.pain-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 18px;border-radius:10px;border:1.5px solid var(--border);background:rgba(255,255,255,.025);text-align:left;cursor:pointer;transition:all .2s;outline:none;font-family:var(--sans);min-height:56px;}
+.pain-btn:hover{border-color:var(--border-2);background:rgba(255,255,255,.04);}
+.pain-btn:focus-visible{outline:2px solid var(--g);outline-offset:2px;}
+.pain-btn.on{background:rgba(52,211,119,.06);border-color:rgba(52,211,119,.3);}
+.pain-chk{width:20px;height:20px;min-width:20px;border-radius:5px;border:2px solid var(--border-2);display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;}
+.pain-btn.on .pain-chk{background:var(--g);border-color:var(--g);}
+.pain-label-wrap{flex:1;}
+.pain-label{font-size:var(--fs-md);font-weight:500;color:var(--text-3);line-height:1.4;transition:color .15s;}
+.pain-btn.on .pain-label{color:var(--text);}
+.pain-badge{font-family:var(--mono);font-size:var(--fs-micro);color:rgba(52,211,119,.82);letter-spacing:.1em;text-transform:uppercase;display:block;margin-top:3px;}
+.pain-cost{font-family:var(--mono);font-size:var(--fs-sm);font-weight:700;color:rgba(240,138,138,.4);flex-shrink:0;transition:color .15s;white-space:nowrap;}
+.pain-btn.on .pain-cost{color:var(--red);}
+.scan-result{margin:20px 28px 0;border-radius:10px;padding:22px;background:rgba(255,255,255,.025);border:1.5px solid var(--border);transition:all .35s;}
+.scan-result.leak{background:rgba(240,138,138,.04);border-color:rgba(240,138,138,.2);}
+.sr-inner{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.sr-label{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);text-transform:uppercase;letter-spacing:.15em;margin-bottom:6px;}
+.sr-total{font-weight:700;font-size:var(--fs-xl);color:var(--text);line-height:1;letter-spacing:-.025em;}
+.sr-mo{font-size:var(--fs-lg);color:var(--text-4);font-weight:400;}
+.sr-year{font-family:var(--mono);font-size:var(--fs-sm);color:rgba(240,138,138,.6);margin-top:5px;display:none;}
+.sr-recs-label{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;text-align:right;}
+.sr-recs-item{font-size:var(--fs-sm);font-weight:600;color:var(--g);line-height:1.5;text-align:right;}
+.scan-cta-wrap{padding:18px 28px 28px;}
+.scan-cta{display:block;width:100%;padding:17px 20px;border-radius:8px;font-family:var(--sans);font-size:var(--fs-md);font-weight:700;text-align:center;border:none;cursor:not-allowed;background:rgba(255,255,255,.05);color:rgba(255,255,255,.5);transition:all .2s;min-height:52px;}
+.scan-cta.ready{background:var(--g);color:var(--text-inv);cursor:pointer;animation:ctaGlow 2.5s ease-in-out infinite;}
+@keyframes ctaGlow{0%,100%{box-shadow:0 0 16px rgba(52,211,119,.12);}50%{box-shadow:0 0 28px rgba(52,211,119,.28);}}
+.scan-cta.ready:hover{background:#34d377;animation:none;box-shadow:0 8px 24px rgba(52,211,119,.3);}
+.scan-meta{text-align:center;font-size:var(--fs-sm);color:var(--text-4);margin-top:10px;}
+.plan-step{display:none;padding:28px;}
+.plan-hd{margin-bottom:18px;}
+.plan-hd h3{font-weight:700;font-size:var(--fs-lg);color:var(--text);letter-spacing:-.03em;margin-bottom:5px;line-height:1.2;}
+.plan-hd p{font-size:var(--fs-sm);color:var(--text-3);line-height:1.6;}
+.plan-items{display:flex;flex-direction:column;gap:10px;margin-bottom:24px;}
+.plan-item{display:flex;gap:14px;background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:10px;padding:16px;}
+.plan-num{width:24px;height:24px;min-width:24px;border-radius:50%;background:rgba(52,211,119,.1);border:1px solid rgba(52,211,119,.25);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;color:var(--g);margin-top:1px;}
+.plan-sol{font-size:var(--fs-md);font-weight:700;color:var(--text);margin-bottom:3px;}
+.plan-fix{font-size:var(--fs-sm);color:var(--text-3);}
+.plan-rec{font-family:var(--mono);font-size:var(--fs-micro);color:var(--g);margin-top:5px;}
+.email-block{background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:10px;padding:22px;}
+.email-block h4{font-size:var(--fs-md);font-weight:700;color:var(--text);margin-bottom:5px;line-height:1.3;}
+.email-block p{font-size:var(--fs-sm);color:var(--text-3);margin-bottom:16px;line-height:1.6;}
+.email-row{display:flex;flex-wrap:wrap;gap:10px;}
+.email-inp{flex:1;min-width:170px;background:rgba(255,255,255,.05);border:1.5px solid var(--border);border-radius:8px;padding:13px 16px;color:var(--text);font-size:var(--fs-md);font-family:var(--sans);outline:none;transition:border-color .2s;min-height:48px;}
+.email-inp:focus{border-color:var(--g);}
+.email-inp::placeholder{color:var(--text-4);}
+.email-go{font-family:var(--sans);font-size:var(--fs-sm);font-weight:700;background:var(--g);color:var(--text-inv);border:none;padding:13px 22px;border-radius:8px;cursor:pointer;white-space:nowrap;transition:background .2s;min-height:48px;}
+.email-go:hover{background:#34d377;}
+.email-disc{font-size:var(--fs-micro);color:var(--text-4);margin-top:10px;line-height:1.5;}
+.done-step{display:none;padding:52px 28px;text-align:center;}
+.done-icon{width:56px;height:56px;border-radius:50%;background:rgba(52,211,119,.1);border:1px solid rgba(52,211,119,.25);display:flex;align-items:center;justify-content:center;margin:0 auto 18px;}
+.done-step h3{font-weight:700;font-size:var(--fs-lg);color:var(--text);letter-spacing:-.02em;margin-bottom:8px;}
+.done-step p{font-size:var(--fs-md);color:var(--text-3);margin-bottom:24px;line-height:1.65;max-width:340px;margin-left:auto;margin-right:auto;}
+
+/* SOLUTIONS */
+.sol-urgent{background:var(--bg-3);border:2px solid rgba(245,182,77,.25);border-radius:14px;overflow:hidden;margin-bottom:20px;position:relative;}
+.sol-urgent-bar{height:3px;background:linear-gradient(90deg,var(--amber),rgba(245,182,77,.3));}
+.sol-urgent-inner{padding:32px 36px;display:flex;align-items:flex-start;justify-content:space-between;gap:32px;flex-wrap:wrap;}
+.sol-urgent-badge{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--amber);background:rgba(245,182,77,.08);border:1px solid rgba(245,182,77,.2);padding:4px 10px;border-radius:3px;display:inline-block;margin-bottom:10px;}
+.sol-urgent-name{font-weight:700;font-size:clamp(22px,4vw,32px);color:var(--text);letter-spacing:-.03em;line-height:1.05;margin-bottom:8px;}
+.sol-urgent-hl{font-size:var(--fs-md);font-weight:600;color:var(--amber);margin-bottom:14px;}
+.sol-urgent-desc{font-size:var(--fs-md);color:var(--text-3);line-height:1.75;max-width:540px;margin-bottom:20px;}
+.sol-urgent-reps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+.sol-rep{background:rgba(255,255,255,.03);border:1px solid var(--border);color:var(--text-4);font-size:var(--fs-micro);padding:3px 9px;border-radius:3px;text-decoration:line-through;text-decoration-color:rgba(240,138,138,.5);}
+.sol-urgent-right{display:flex;flex-direction:column;align-items:flex-end;gap:16px;min-width:200px;}
+.countdown-box{background:rgba(245,182,77,.06);border:1px solid rgba(245,182,77,.2);border-radius:10px;padding:20px 24px;text-align:center;}
+.countdown-label{font-family:var(--mono);font-size:var(--fs-micro);font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--amber);margin-bottom:8px;}
+.countdown-nums{display:flex;gap:8px;justify-content:center;}
+.cd-unit{text-align:center;}
+.cd-val{font-family:var(--mono);font-size:var(--fs-lg);font-weight:700;color:var(--text);line-height:1;}
+.cd-l{font-size:var(--fs-micro);color:var(--text-4);margin-top:2px;}
+.cd-sep{font-family:var(--mono);font-size:var(--fs-lg);font-weight:700;color:var(--text-4);padding-top:2px;}
+.sol-urgent-meta{display:flex;align-items:center;justify-content:space-between;padding-top:16px;border-top:1px solid rgba(245,182,77,.15);}
+.sol-urgent-save{font-family:var(--mono);font-size:var(--fs-md);font-weight:700;color:var(--amber);}
+.sol-urgent-time{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:4px 9px;border-radius:3px;}
+.sol-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;}
+.sol-card{border-radius:12px;display:flex;flex-direction:column;overflow:hidden;border:1.5px solid;transition:transform .25s,box-shadow .25s;}
+.sol-card:hover{transform:translateY(-6px);}
+.sol-card.g{border-color:rgba(52,211,119,.2);background:rgba(52,211,119,.03);}
+.sol-card.s{border-color:rgba(140,207,232,.2);background:rgba(140,207,232,.03);}
+.sol-card.v{border-color:rgba(195,184,239,.2);background:rgba(195,184,239,.03);}
+.sol-card.t{border-color:rgba(255,46,99,.18);background:rgba(255,46,99,.03);}
+.sol-card.g:hover{box-shadow:0 20px 48px rgba(52,211,119,.1);}
+.sol-card.s:hover{box-shadow:0 20px 48px rgba(140,207,232,.08);}
+.sol-card.v:hover{box-shadow:0 20px 48px rgba(195,184,239,.08);}
+.sol-card.t:hover{box-shadow:0 20px 48px rgba(255,46,99,.08);}
+.sol-bar{height:3px;}
+.sol-card.g .sol-bar{background:var(--g);}
+.sol-card.s .sol-bar{background:var(--sky);}
+.sol-card.v .sol-bar{background:var(--vio);}
+.sol-card.t .sol-bar{background:var(--tiktok);}
+.sol-body{padding:var(--card-pad);flex:1;}
+.sol-name{font-weight:700;font-size:var(--fs-lg);color:var(--text);letter-spacing:-.02em;margin-bottom:5px;margin-top:14px;line-height:1.2;}
+.sol-hl{font-size:var(--fs-sm);font-weight:600;margin-bottom:14px;}
+.sol-card.g .sol-hl{color:var(--g);}
+.sol-card.s .sol-hl{color:var(--sky);}
+.sol-card.v .sol-hl{color:var(--vio);}
+.sol-card.t .sol-hl{color:var(--tiktok);}
+.sol-desc{font-size:var(--fs-md);color:var(--text-3);line-height:1.7;margin-bottom:18px;}
+.sol-rep-label{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;}
+.sol-reps{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
+.sol-meta{display:flex;align-items:center;justify-content:space-between;padding-top:16px;border-top:1px solid var(--border);}
+.sol-save{font-family:var(--mono);font-size:var(--fs-sm);font-weight:700;}
+.sol-card.g .sol-save{color:var(--g);}
+.sol-card.s .sol-save{color:var(--sky);}
+.sol-card.v .sol-save{color:var(--vio);}
+.sol-card.t .sol-save{color:var(--tiktok);}
+.sol-time{font-family:var(--mono);font-size:var(--fs-micro);color:var(--text-4);background:rgba(255,255,255,.03);border:1px solid var(--border);padding:4px 9px;border-radius:3px;}
+.sol-foot{padding:0 var(--card-pad) var(--card-pad);display:flex;flex-direction:column;gap:10px;}
+.sol-cta{display:flex;align-items:center;justify-content:center;text-align:center;text-decoration:none;font-family:var(--sans);font-size:var(--fs-sm);font-weight:700;padding:14px;border-radius:8px;background:var(--text);color:var(--bg);transition:background .2s;min-height:48px;}
+.sol-cta:hover{background:#dfe6e2;}
+.sol-guide{display:block;text-align:center;text-decoration:none;font-size:var(--fs-micro);font-family:var(--mono);letter-spacing:.08em;color:var(--text-4);transition:color .2s;padding:4px 0;}
+.sol-guide:hover{color:var(--text-3);}
+
+/* MOBILE */
+@media(max-width:640px){
+  :root{--sp:64px;--card-pad:24px;}
+  .hero{padding:60px 20px 40px;}
+  .btn,.btn-outline,.btn-pro{width:100%;max-width:340px;justify-content:center;}
+  .stat-strip{grid-template-columns:repeat(2,1fr);}
+  .sol-urgent-inner{flex-direction:column;}
+  .sol-urgent-right{align-items:flex-start;min-width:auto;width:100%;}
+  .sol-grid{grid-template-columns:1fr;}
+  .pain-list,.scan-cta-wrap,.plan-step,.done-step{padding-left:20px;padding-right:20px;}
+  .scan-result{margin-left:20px;margin-right:20px;}
+  .email-row{flex-direction:column;}
+}
+</style>

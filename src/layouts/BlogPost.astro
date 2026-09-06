@@ -1,0 +1,257 @@
+---
+import Base from './Base.astro';
+import FAQSection from '../components/FAQSection.astro';
+import RelatedGuides from '../components/RelatedGuides.astro';
+import AuthorCard from '../components/AuthorCard.astro';
+import Disclosure from '../components/Disclosure.astro';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  entry: CollectionEntry<'blog'>;
+}
+
+const { entry } = Astro.props;
+const {
+  title,
+  heading,
+  description,
+  answer,
+  canonical,
+  publishDate,
+  updatedDate,
+  verifiedDate,
+  category,
+  readTime,
+  badge,
+  faqs,
+  relatedGuides,
+} = entry.data;
+// Posts that carry a /go/* affiliate cloak get an on-page disclosure above the body,
+// so it always precedes the first affiliate link rather than sitting in the footer.
+const hasAffiliateLink = entry.body?.includes('/go/') ?? false;
+
+const rawCanonical = canonical ?? `https://stackarchitect.xyz/blog/${entry.id}/`;
+const canonicalUrl = rawCanonical.endsWith('/') ? rawCanonical : rawCanonical + '/';
+
+// BreadcrumbList JSON-LD
+const categoryLabels: Record<string, string> = {
+  tracking: 'Ad Tracking',
+  inventory: 'Inventory',
+  email: 'Email Marketing',
+  automation: 'Automation',
+  workflow: 'Workflow',
+  ai: 'AI Tools',
+  support: 'Customer Support',
+  product: 'Products',
+};
+
+const breadcrumbSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'BreadcrumbList',
+  itemListElement: [
+    {
+      '@type': 'ListItem',
+      position: 1,
+      name: 'Home',
+      item: 'https://stackarchitect.xyz/',
+    },
+    {
+      '@type': 'ListItem',
+      position: 2,
+      name: categoryLabels[category] ?? category,
+      item: 'https://stackarchitect.xyz/shopify-automation-guides/',
+    },
+    { '@type': 'ListItem', position: 3, name: title, item: canonicalUrl },
+  ],
+};
+
+// FAQPage JSON-LD — only if FAQs present
+const faqSchema =
+  faqs && faqs.length > 0
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqs.map(({ question, answer }) => ({
+          '@type': 'Question',
+          name: question,
+          acceptedAnswer: { '@type': 'Answer', text: answer },
+        })),
+      }
+    : null;
+
+const schemas = [
+  breadcrumbSchema,
+  ...(faqSchema ? [faqSchema] : []),
+];
+
+// Visible breadcrumb trail
+const breadcrumb = [
+  { label: 'Home', href: '/' },
+  {
+    label: categoryLabels[category] ?? category,
+    href: '/shopify-automation-guides/',
+  },
+  { label: title },
+];
+
+const displayDate = (d: string) =>
+  new Date(d).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+// Runbook §3.2: titles ≤60 chars. The " | Stack Architect" suffix costs 18
+// characters, and brand recognition at DR 0 is worth nothing next to a
+// truncated headline — so it is dropped whenever it would push past 60.
+const SUFFIX = ' | Stack Architect';
+const pageTitle = (title + SUFFIX).length <= 60 ? title + SUFFIX : title;
+---
+
+<Base
+  ogImage={entry.data.ogImage}
+  title={pageTitle}
+  description={description}
+  canonical={canonicalUrl}
+  schema={schemas}
+  pageType="article"
+  publishDate={publishDate}
+  updatedDate={updatedDate}
+  verifiedDate={verifiedDate}
+  breadcrumb={breadcrumb}
+>
+
+  <!-- Reading progress bar element -->
+  <div id="reading-progress"></div>
+
+  <main class="flex-1 max-w-3xl mx-auto px-4 py-10 w-full">
+    <!-- Post metadata bar -->
+    <div class="flex flex-wrap items-center gap-3 text-xs text-[#93a09a] font-mono mb-6 border-b border-[#222825] pb-4">
+      <span>Published: {displayDate(publishDate)}</span>
+      {updatedDate && updatedDate !== publishDate && (
+        <span>· Updated: {displayDate(updatedDate)}</span>
+      )}
+      <span>· {readTime} min read</span>
+      <span>· {categoryLabels[category] ?? category}</span>
+    </div>
+
+    <!--
+      The H1 is rendered here from frontmatter, not from the markdown body.
+      #answer must follow the H1 in the DOM — it is the quotable unit
+      (Runbook §3.1) and reads as a summary of the title above it, not as
+      a preamble to an unseen heading. seo-audit.mjs enforces this order.
+    -->
+    <header class="sa-post-head">
+      <h1 class="sa-post-title">{heading ?? title}</h1>
+      {answer && <p id="answer" class="sa-answer">{answer}</p>}
+    </header>
+
+    <!-- Table of contents — injected by inline script if ≥3 H2s -->
+    <div id="toc-container"></div>
+
+    {hasAffiliateLink && <Disclosure />}
+
+    <!-- MDX content -->
+    <article id="post-body" class="sa-prose">
+      <slot />
+    </article>
+
+    <!-- Author block -->
+    <AuthorCard />
+
+    {faqs && faqs.length > 0 && <FAQSection faqs={faqs} />}
+    {relatedGuides && relatedGuides.length > 0 && <RelatedGuides guides={relatedGuides} />}
+  </main>
+
+</Base>
+
+<style>
+  .sa-post-head {
+    max-width: var(--measure);
+    margin: 0 auto;
+  }
+
+  .sa-post-title {
+    font-family: var(--font-display);
+    font-size: clamp(30px, 5vw, 46px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: var(--color-heading);
+    margin: 0 0 20px;
+    text-wrap: balance;
+  }
+
+  /* Inherits --text-body / --leading-body; the tint and rule carry the
+     emphasis instead of a second font size. */
+  .sa-answer {
+    margin: 0 0 28px;
+    padding: 18px 20px;
+    border-left: 3px solid var(--color-accent);
+    background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+    border-radius: 0 8px 8px 0;
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    color: var(--color-body);
+  }
+</style>
+
+<!-- Reading progress bar script -->
+<script>
+  const bar = document.getElementById('reading-progress');
+  if (bar) {
+    window.addEventListener('scroll', () => {
+      const body = document.body;
+      const docEl = document.documentElement;
+      const scrollTop = docEl.scrollTop || body.scrollTop;
+      const scrollHeight = docEl.scrollHeight - docEl.clientHeight;
+      const pct = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0;
+      bar.style.width = `${Math.min(pct, 100)}%`;
+    }, { passive: true });
+  }
+</script>
+
+<!-- Table of contents script -->
+<script>
+  const body = document.getElementById('post-body');
+  const tocContainer = document.getElementById('toc-container');
+  if (body && tocContainer) {
+    const h2s = Array.from(body.querySelectorAll('h2'));
+    if (h2s.length >= 3) {
+      // Ensure each H2 has an id
+      h2s.forEach((h, i) => {
+        if (!h.id) {
+          h.id = `section-${i}-${h.textContent?.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') ?? i}`;
+        }
+      });
+
+      const toc = document.createElement('nav');
+      toc.setAttribute('aria-label', 'Table of contents');
+      // sa-toc carries the layout (two columns on wide viewports). A ten-item
+      // single-column list pushed the first line of the article below 1,000px,
+      // so a reader arriving from search met a navigation block instead of a
+      // sentence. Halving its height puts prose above the fold.
+      toc.className = 'sa-toc border border-[#222825] bg-[#0c0f0d] p-4 mb-8 font-mono';
+
+      const label = document.createElement('div');
+      label.className = 'text-xs text-[#93a09a] uppercase tracking-widest mb-3';
+      label.textContent = 'CONTENTS //';
+      toc.appendChild(label);
+
+      const ul = document.createElement('ul');
+      ul.className = 'space-y-1';
+      h2s.forEach((h) => {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = `#${h.id}`;
+        a.textContent = h.textContent ?? '';
+        a.className = 'text-xs text-gray-400 hover:text-[#34d377] transition-colors flex items-center gap-2 py-0.5';
+        a.innerHTML = `<span class="text-[#262c29]">→</span> ${a.textContent}`;
+        li.appendChild(a);
+        ul.appendChild(li);
+      });
+      toc.appendChild(ul);
+      tocContainer.appendChild(toc);
+    }
+  }
+</script>

@@ -1,0 +1,4 @@
+{
+  "_readme": "Empty by design. Every pre-existing schema-only numeric claim was resolved on 2026-08-26 by applying the rule: if the number is not visible on the page, it leaves the schema. Any entry added here needs a written justification \u2014 the default is to fix the schema, not to exempt it.",
+  "allow": []
+}

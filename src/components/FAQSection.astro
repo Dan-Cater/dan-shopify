@@ -1,0 +1,80 @@
+---
+interface FAQ {
+  question: string;
+  answer: string;
+}
+
+interface Props {
+  faqs: FAQ[];
+}
+
+const { faqs } = Astro.props;
+---
+
+<section class="faq-section" aria-labelledby="faq-heading">
+  <h2 id="faq-heading">Frequently Asked Questions</h2>
+  <div class="faq-list">
+    {faqs.map(({ question, answer }) => (
+      <div class="faq-item">
+        <p class="faq-q">{question}</p>
+        <div>
+          <p class="faq-a">{answer}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  .faq-section {
+    margin: 52px 0 0;
+  }
+
+  .faq-section h2 {
+    font-size: clamp(20px, 3vw, 28px);
+    font-weight: 700;
+    letter-spacing: -1px;
+    color: #fff;
+    margin: 0 0 24px;
+    padding-top: 36px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .faq-list {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .faq-item {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 20px 0;
+  }
+
+  .faq-item:first-child {
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .faq-q {
+    font-size: 17px;
+    font-weight: 700;
+    color: #f2f5f3;
+    margin: 0 0 10px;
+    line-height: 1.4;
+    /* Question and answer share a measure with the article body, so the eye
+       does not have to re-adjust between the two. */
+    max-width: 68ch;
+  }
+
+  .faq-a {
+    /* Was 14px in #6b7671, which is 4.09:1 against the #0c0f0d page — under
+       the 4.5:1 WCAG AA floor for body text, and the reason this section read
+       as unreachable grey. #b6c0ba is the site's own --color-body at 10.31:1,
+       and these answers are body text: they are also the acceptedAnswer.text
+       in the FAQPage graph, so they are the most quoted prose on the page. */
+    font-size: 16px;
+    color: #b6c0ba;
+    line-height: 1.75;
+    margin: 0;
+    max-width: 68ch;
+  }
+</style>

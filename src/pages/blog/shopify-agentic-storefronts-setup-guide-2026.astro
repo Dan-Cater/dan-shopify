@@ -1,0 +1,944 @@
+---
+import Base from '../../layouts/Base.astro';
+import Disclosure from '../../components/Disclosure.astro';
+import CHANNELS from '../../data/agentic-storefronts-channels.json';
+
+/* ---------------------------------------------------------------------------
+ * The channel matrix, the timeline, the limits list and the Dataset JSON-LD all
+ * read from src/data/agentic-storefronts-channels.json. That file carries a
+ * verifiedDate and a source URL per channel.
+ *
+ * Why a data file rather than hand-written HTML: this page previously stated
+ * six things that were wrong by August 2026 — a monthly fee for an app that is
+ * free, Perplexity as a Shopify channel when it is not one, discount codes as
+ * unsupported when they are supported, in-conversation ChatGPT checkout eight
+ * months after OpenAI retired it, a January launch date for a December
+ * announcement, and an "11x" statistic that had been superseded twice. Those
+ * were spread across the prose, the FAQ copy and the JSON-LD independently, so
+ * a correction in one place left the other two wrong. Now there is one record.
+ *
+ * The checkout model inverted on 24 March 2026 and most competing guides have
+ * not caught up: ChatGPT redirects to the merchant's own checkout, while
+ * Google, Copilot and Meta carry checkout inside the AI surface. Almost every
+ * limitation merchants worry about applies ONLY to that direct-checkout path.
+ * That distinction is the substance of this page.
+ * ------------------------------------------------------------------------ */
+
+const UPDATED = CHANNELS.verifiedDate;              // 2026-08-24
+const PUBLISHED = '2026-03-21';
+const CANONICAL = 'https://stackarchitect.xyz/blog/shopify-agentic-storefronts-setup-guide-2026/';
+
+const shopifyChannels = CHANNELS.channels.filter((c) => c.inShopifyAdmin);
+const directChannels = shopifyChannels.filter((c) => c.checkoutModel === 'direct');
+const limits = CHANNELS.directCheckoutLimits;
+const kb = CHANNELS.knowledgeBaseApp;
+
+const prettyDate = (iso: string) =>
+  new Date(iso + 'T00:00:00Z').toLocaleDateString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  });
+
+/* FAQ — one array. The visible <details> list and the FAQPage graph are both
+   generated from it, so the count and the wording cannot drift apart. */
+const FAQ = [
+  {
+    q: 'What are Shopify Agentic Storefronts?',
+    a: "Shopify Agentic Storefronts connect your product catalog to AI assistants — ChatGPT, Google AI Mode and Gemini, Microsoft Copilot and Meta AI — through one setting in your Shopify admin, with no separate integration per platform. What each channel then does with a shopper differs: Google, Copilot and Meta complete the purchase inside their own interface, while ChatGPT sends the shopper to your own Shopify checkout. Announced in Shopify's Winter '26 Edition on 10 December 2025 and generally available to eligible merchants from 24 March 2026.",
+  },
+  {
+    q: 'Does ChatGPT still let customers buy without leaving the chat?',
+    a: 'No. OpenAI retired Instant Checkout on 24 March 2026, and Shopify’s documentation now describes ChatGPT as a discovery-focused referrer: shoppers complete the purchase on your own Shopify checkout, opened in the ChatGPT in-app browser or a new tab. This matters more than it sounds. Because the transaction happens on your checkout, the product-type restrictions, fulfilment restrictions and pixel restrictions that apply to direct checkout do not apply to ChatGPT traffic at all — your normal checkout rules and your client-side pixels work as they always have. Guides published before 24 March 2026 describe the opposite arrangement.',
+  },
+  {
+    q: 'Am I eligible for Shopify Agentic Storefronts?',
+    a: 'Eligibility is per channel, not one blanket rule, and it stacks two separate conditions: where your store is based, and where you sell. ChatGPT, Microsoft Copilot and Meta AI accept a store based in any country provided it sells to customers in the United States. Google AI Mode and Gemini require the store itself to be based in the United States, United Kingdom, Australia or Canada and to sell into one of those four countries — and even then, direct checkout renders only for US-based customers, with everyone else redirected. Google also remains in early access and requires the Google & YouTube sales channel with product and shipping sync enabled. Agentic storefronts are active by default for eligible stores; the setting lives under Sales channels, then Agentic.',
+  },
+  {
+    q: 'How much does the Shopify Knowledge Base app cost?',
+    a: 'It is free. The Shopify Knowledge Base app is published by Shopify, launched on 16 May 2025, and its App Store listing shows no paid tier and no Plus-only pricing. Guides quoting a monthly fee for standard plans appear to be describing third-party knowledge-base apps instead. The app is not visible on your storefront — your FAQs serve as a data source that AI platforms read when answering questions about your products.',
+  },
+  {
+    q: 'Which products cannot be sold through Agentic Storefronts?',
+    a: 'Subscriptions, product bundles, digital products, customizable products and B2B-only products are not supported in agentic storefront direct checkouts. Local delivery, pickup in store and pickup points are not available as delivery methods, and custom checkout fields, checkout upsells, checkout validations and required customer sign-in do not work either. Every one of those restrictions applies to the direct-checkout channels only — Google, Copilot and Meta. ChatGPT sends shoppers to your own checkout, where none of them apply.',
+  },
+  {
+    q: 'Do discount codes work in agentic checkout?',
+    a: 'Yes. Shopify’s documentation states that automatic discounts and discount codes you set up are both supported in agentic storefront direct checkouts. Several widely-shared guides claim the opposite; that claim does not match Shopify’s current documentation.',
+  },
+  {
+    q: 'Will Google Analytics and my Meta pixel track agentic orders?',
+    a: 'Not in direct checkout. Shopify states that Google Analytics and custom pixels will not fire there — only server-to-server pixels for the started and completed events. So an order placed inside Google AI Mode, Copilot or Meta AI reaches your Shopify admin but arrives in GA4 and Meta Ads Manager with no client-side event behind it. If you buy ads and measure return on ad spend from browser pixels, those orders look like they came from nowhere. Server-side tracking is the fix, and it is worth having in place before you enable the channels rather than after. ChatGPT is unaffected — that checkout is yours, so your pixels fire normally.',
+  },
+  {
+    q: 'Does Shopify charge a fee for selling through AI channels?',
+    a: 'No. Shopify’s documentation states there are no fees associated with selling in ChatGPT, in Google AI Mode and Gemini’s direct checkout, or in agentic storefront direct checkouts generally. You pay your standard payment processing fees and nothing further. Shopify also offers a separate free Agentic plan aimed at merchants who do not use Shopify as their primary storefront; it excludes the Online Store, gift cards, manual orders and Shop post-purchase offers.',
+  },
+  {
+    q: 'Is Perplexity a Shopify agentic channel?',
+    a: 'No, despite appearing in Shopify’s December 2025 launch announcement. In-chat buying on Perplexity runs on PayPal Instant Buy, those orders are managed through PayPal rather than your Shopify admin, and merchants apply to the Perplexity Merchant Program separately. Perplexity is no longer listed as an Agentic Storefronts channel in Shopify’s help documentation. Guides presenting it as a Shopify channel with redirect checkout are describing an arrangement that does not exist.',
+  },
+  {
+    q: 'My store is not eligible yet. Is any of this worth doing now?',
+    a: 'Yes, because discovery already happens without it. AI assistants crawl the web and read Shopify Catalog regardless of your agentic settings — what the feature adds is the checkout, not the visibility. Four things pay off immediately: install and populate the free Knowledge Base app, complete your product data so AI assistants can match products to conversational queries, add FAQPage structured data to your content, and get server-side tracking working so you have no attribution gap on the day the channels switch on.',
+  },
+];
+
+const stripTags = (html: string) =>
+  html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+
+/* Dataset — the matrix is the citable artefact on this page. Naming each field
+   as a variableMeasured is what lets a model quote a single cell (\"Google
+   requires a store based in the US, UK, AU or CA\") and attribute it. */
+const datasetSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'Dataset',
+  '@id': CANONICAL + '#matrix',
+  name: 'Shopify Agentic Storefronts — per-channel eligibility and capability matrix (August 2026)',
+  description: CHANNELS.description,
+  license: 'https://creativecommons.org/licenses/by/4.0/',
+  creator: { '@id': 'https://stackarchitect.xyz/#org' },
+  isPartOf: { '@id': CANONICAL },
+  dateModified: UPDATED,
+  temporalCoverage: '2025-12-10/' + UPDATED,
+  variableMeasured: [
+    ...CHANNELS.channels.flatMap((c) => [
+      { '@type': 'PropertyValue', name: `${c.name} — checkout model`, value: c.checkoutModel },
+      { '@type': 'PropertyValue', name: `${c.name} — store must be based in`, value: c.storeLocationRule },
+      { '@type': 'PropertyValue', name: `${c.name} — must sell to customers in`, value: c.customerLocationRule },
+      { '@type': 'PropertyValue', name: `${c.name} — channel fee`, value: c.fee },
+    ]),
+    { '@type': 'PropertyValue', name: 'Direct checkout — unsupported product types', value: limits.unsupportedProductTypes.join('; ') },
+    { '@type': 'PropertyValue', name: 'Direct checkout — unsupported delivery methods', value: limits.unsupportedFulfilment.join('; ') },
+    { '@type': 'PropertyValue', name: 'Direct checkout — discount codes supported', value: 'Yes' },
+    { '@type': 'PropertyValue', name: 'Direct checkout — client-side pixels fire', value: 'No; server-to-server started and completed events only' },
+    { '@type': 'PropertyValue', name: 'Shopify Knowledge Base app price', value: kb.price },
+  ],
+};
+
+const faqSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  '@id': CANONICAL + '#faq',
+  inLanguage: 'en-GB',
+  mainEntity: FAQ.map((f) => ({
+    '@type': 'Question',
+    name: f.q,
+    acceptedAnswer: { '@type': 'Answer', text: stripTags(f.a) },
+  })),
+};
+
+/* Base.astro emits the Article node (from pageType="article") and the
+   BreadcrumbList (from the `breadcrumb` prop), so neither is repeated here.
+   This graph carries only what the layout cannot infer: the HowTo. */
+const graphSchema = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'HowTo',
+      '@id': CANONICAL + '#howto',
+      name: 'How to set up Shopify Agentic Storefronts',
+      description:
+        'Six steps to check eligibility, prepare product and knowledge-base data, close the attribution gap and enable AI sales channels in the Shopify admin.',
+      totalTime: 'PT45M',
+      estimatedCost: { '@type': 'MonetaryAmount', currency: 'USD', value: '0' },
+      step: [
+        { '@type': 'HowToStep', position: 1, name: 'Check eligibility, per channel', text: 'Open Shopify admin, then Sales channels, then Agentic. Eligibility is per channel: ChatGPT, Copilot and Meta accept any store location selling to US customers; Google AI Mode and Gemini require a store based in the US, UK, Australia or Canada.' },
+        { '@type': 'HowToStep', position: 2, name: 'Install the free Knowledge Base app', text: 'Install the Shopify Knowledge Base app, which is free, and populate it with FAQs, return and shipping detail and brand voice guidance. It is invisible on your storefront and serves as the data source AI platforms read.' },
+        { '@type': 'HowToStep', position: 3, name: 'Close the attribution gap before enabling', text: 'Direct checkout fires only server-to-server started and completed pixels. Get server-side tracking working first so agentic orders are attributed rather than appearing to come from nowhere.' },
+        { '@type': 'HowToStep', position: 4, name: 'Audit the catalog against the unsupported list', text: 'Subscriptions, bundles, digital products, customizable products and B2B-only products are unsupported in agentic direct checkout. Confirm which of your products are affected and on which channels.' },
+        { '@type': 'HowToStep', position: 5, name: 'Write product data for conversational queries', text: 'AI assistants match intent, not keywords. Give every product a descriptive title, a description of 200 words or more covering materials and use cases, every variant defined with accurate stock, and metafields for the specifics a description omits.' },
+        { '@type': 'HowToStep', position: 6, name: 'Enable channels and verify', text: 'Agree to the Agentic Storefronts Supplemental Terms and toggle each channel individually. Use the Test Agent to confirm products surface correctly, then filter the Orders list by channel to monitor AI-attributed revenue.' },
+      ],
+    },
+  ],
+};
+---
+<Base
+  title="Shopify Agentic Storefronts — Eligibility & Limits 2026"
+  description="Which AI channels Shopify Agentic Storefronts covers, who qualifies, where checkout happens after the March 2026 change, and which limits apply where."
+  canonical={CANONICAL}
+  pageType="article"
+  publishDate={PUBLISHED}
+  updatedDate={UPDATED}
+  breadcrumb={[
+    { label: 'Home', href: '/' },
+    { label: 'Guides', href: '/shopify-automation-guides/' },
+    { label: 'Shopify Agentic Storefronts' },
+  ]}
+>
+<Fragment slot="head">
+  <script type="application/ld+json" set:html={JSON.stringify(graphSchema)} />
+  <script type="application/ld+json" set:html={JSON.stringify(faqSchema)} />
+  <script type="application/ld+json" set:html={JSON.stringify(datasetSchema)} />
+</Fragment>
+
+
+<!-- ══════════════════════════════════════════
+  NAV
+══════════════════════════════════════════ -->
+
+<!-- ══════════════════════════════════════════
+  BREADCRUMB
+══════════════════════════════════════════ -->
+<main id="main-content">
+{/* Breadcrumb comes from Base.astro via the `breadcrumb` prop — it also
+    emits the BreadcrumbList JSON-LD, so a second hand-rolled trail here would
+    render twice and describe itself twice. */}
+<div class="blog-title-band">
+  <h1>Shopify Agentic Storefronts 2026 &mdash; Eligibility, Checkout and Limits, Per Channel</h1>
+  <div class="band-meta">Updated {prettyDate(UPDATED)} &middot; Verified against Shopify&rsquo;s documentation &middot; 12 min read</div>
+</div>
+
+<div class="article-outer">
+<div class="sa-agentic">
+
+  <p id="answer" class="sa-answer">Shopify Agentic Storefronts connect your catalog to ChatGPT, Google AI Mode, Microsoft Copilot and Meta AI from one admin setting. Since 24 March 2026 the channels split: Google, Copilot and Meta complete checkout inside the AI surface, while ChatGPT redirects shoppers to your own Shopify checkout &mdash; which is why most limits apply to only some channels.</p>
+
+  <div class="callout amber" id="stale-warning">
+    <span class="callout-label">&#9888; If you have read other guides on this, check their date</span>
+    <p>This feature reversed itself on <strong>24 March 2026</strong>. ChatGPT launched with in-conversation Instant Checkout; OpenAI retired it that day, and Shopify&rsquo;s documentation now describes ChatGPT as a discovery-focused referrer that sends shoppers to your own checkout. Meanwhile Google, Copilot and Meta gained direct checkout. Most guides still in circulation describe the launch arrangement, which is the opposite of the current one &mdash; and they inherit a set of restrictions from it that no longer apply the way they say.</p>
+  </div>
+
+  <!-- ═══════ THE MATRIX — the citable artefact ═══════ -->
+  <div class="sec-mark" id="matrix">01 &mdash; The matrix: who is eligible for what</div>
+  <div class="prose">
+    <h2>Eligibility and capability, per channel</h2>
+    <p>Eligibility is not one rule. It stacks two independent conditions &mdash; where your store is based, and where you sell &mdash; and they differ by channel. A merchant in Manchester is eligible for three of the four channels and, for the fourth, eligible to appear but not to take checkout from most of their customers. That is genuinely hard to work out from Shopify&rsquo;s documentation, because it is spread across four pages.</p>
+    <p>Every cell below is sourced. The linked page is Shopify&rsquo;s, not ours.</p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="matrix-table">
+      <caption class="tbl-caption">Shopify Agentic Storefronts, verified {prettyDate(CHANNELS.verifiedDate)} against {CHANNELS.verifiedAgainst}</caption>
+      <thead>
+        <tr>
+          <th scope="col">Channel</th>
+          <th scope="col">Where checkout happens</th>
+          <th scope="col">Your store must be based in</th>
+          <th scope="col">You must sell to</th>
+          <th scope="col">Fee</th>
+        </tr>
+      </thead>
+      <tbody>
+        {CHANNELS.channels.map((c) => (
+          <tr class={c.inShopifyAdmin ? '' : 'row-out'}>
+            <th scope="row" class="col-ch">
+              {c.name}
+              <a class="cell-src" href={c.source} target="_blank" rel="noopener" aria-label={`Shopify documentation for ${c.name}`}>source&nbsp;&#8599;</a>
+            </th>
+            <td>
+              <span class={`ck ck-${c.checkoutModel}`}>{
+                c.checkoutModel === 'direct' ? 'In the AI surface'
+                : c.checkoutModel === 'redirect' ? 'Your own checkout'
+                : 'Outside Shopify'
+              }</span>
+            </td>
+            <td>{c.storeLocationRule}</td>
+            <td>{c.customerLocationRule}</td>
+            <td>{c.fee}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+  <p class="table-note">Perplexity is listed because it is widely described as a Shopify agentic channel and is not one. It appeared in Shopify&rsquo;s December 2025 announcement and has since been dropped from the help documentation.</p>
+
+  <div class="callout green">
+    <span class="callout-label">The distinction that decides everything else</span>
+    <p><strong>Direct checkout</strong> &mdash; {directChannels.map((c) => c.name).join(', ')} &mdash; happens inside the AI product. Shopify&rsquo;s restrictions on product types, delivery methods, checkout extensions and tracking pixels all apply there.<br><br>
+    <strong>ChatGPT is a redirect.</strong> The shopper lands on your Shopify checkout. Your checkout rules, your extensions, your subscriptions, your bundles and your client-side pixels all behave exactly as they do for any other visitor. <strong>None of the direct-checkout restrictions apply to ChatGPT traffic.</strong> Almost every guide on this subject blurs those two paths into one list of limitations, which makes the feature sound far more constrained than it is.</p>
+  </div>
+
+  <!-- ═══════ LIMITS ═══════ -->
+  <div class="sec-mark" id="limits">02 &mdash; What breaks, and only where</div>
+  <div class="prose">
+    <h2>Direct-checkout restrictions</h2>
+    <p>These apply to {directChannels.map((c) => c.name).join(', ')}. They do not apply to ChatGPT.</p>
+  </div>
+
+  <div class="lim-grid">
+    <div class="lim-card">
+      <div class="lim-h">Product types that cannot be sold</div>
+      <ul class="lim-ul">{limits.unsupportedProductTypes.map((x) => <li>{x}</li>)}</ul>
+    </div>
+    <div class="lim-card">
+      <div class="lim-h">Delivery methods unavailable</div>
+      <ul class="lim-ul">{limits.unsupportedFulfilment.map((x) => <li>{x}</li>)}</ul>
+    </div>
+    <div class="lim-card">
+      <div class="lim-h">Checkout features that do not run</div>
+      <ul class="lim-ul">{limits.unsupportedCheckoutFeatures.map((x) => <li>{x}</li>)}</ul>
+    </div>
+    <div class="lim-card lim-ok">
+      <div class="lim-h">Works, despite what you may have read</div>
+      <ul class="lim-ul">
+        <li>Automatic discounts</li>
+        <li>Discount codes</li>
+      </ul>
+      <p class="lim-quote">&ldquo;{limits.discounts.quote}&rdquo;</p>
+    </div>
+  </div>
+
+  <div class="callout sky">
+    <span class="callout-label">A correction worth making explicitly</span>
+    <p>Several widely-shared guides state that discount codes may not work in agentic checkout. Shopify&rsquo;s documentation says the opposite, in those words. If you have been holding a promotion back from these channels on that basis, you did not need to.</p>
+  </div>
+
+  <!-- ═══════ ATTRIBUTION ═══════ -->
+  <div class="sec-mark" id="attribution">03 &mdash; The attribution gap, and what to do about it</div>
+  <div class="prose">
+    <h2>Your agentic orders will look like they came from nowhere</h2>
+    <p>This is the limitation with real money attached, and it is the one every competing guide quotes without operationalising. Shopify states it plainly:</p>
+  </div>
+
+  <blockquote class="pull-quote">
+    &ldquo;{limits.pixels.quote}&rdquo;
+    <cite><a href={limits.source} target="_blank" rel="noopener">Shopify Help Center &mdash; AI channels with built-in checkout</a></cite>
+  </blockquote>
+
+  <div class="prose">
+    <p>Read carefully, that means an order placed inside Google AI Mode, Copilot or Meta AI reaches your Shopify admin correctly &mdash; revenue is not lost &mdash; but arrives in GA4 and in Meta Ads Manager with no client-side event behind it. Only two server-to-server events fire: <code>started</code> and <code>completed</code>.</p>
+    <p>If you buy ads and measure return on ad spend from browser pixels, the consequence is specific: the AI channels will appear to convert at zero while quietly taking revenue, and the campaigns that fed them will be under-credited. Optimisation algorithms fed under-reported conversions bid down. You are not just missing a number in a dashboard; you are training your ad accounts on a false signal.</p>
+    <h3>What actually closes it</h3>
+    <ul>
+      <li><strong>Shopify&rsquo;s native Customer events pixels</strong> fire server-side and will capture agentic orders once configured under <strong>Settings &rarr; Customer events</strong>. This is the baseline and it costs nothing.</li>
+      <li><strong>Meta Conversions API</strong> needs to be sending Purchase events server-side rather than relying on the browser pixel. Our free <a href="/capi-shield/">CAPI Shield</a> build does this through a Make.com webhook.</li>
+      <li><strong>Google Enhanced Conversions</strong> likewise, via a server-side container or Shopify&rsquo;s Google channel &mdash; see <a href="/shopify-google-ads-conversion-tracking/">the free Enhanced Conversions setup</a>.</li>
+    </ul>
+    <p>The sequencing matters more than the tooling. Turn the channels on before server-side tracking is live and you get a period of unattributed revenue you cannot reconstruct afterwards, because the events were never recorded. Turn tracking on first and there is no gap to explain.</p>
+  </div>
+
+  <div class="inline-cta green">
+    <div class="ict-text">
+      <h4>Close the gap before you enable the channels</h4>
+      <p>CAPI Shield is free server-side tracking for Meta and Google, built on Make.com&rsquo;s free tier. Roughly an hour to deploy, and it is the difference between attributed and invisible agentic revenue.</p>
+    </div>
+    <a href="/capi-shield/" class="btn btn-g">Deploy CAPI Shield &mdash; free &rarr;</a>
+  </div>
+
+  <!-- ═══════ SETUP ═══════ -->
+  <div class="sec-mark" id="setup">04 &mdash; Setup, in the order that avoids rework</div>
+  <div class="prose">
+    <h2>How to set up Shopify Agentic Storefronts</h2>
+    <p>Around 45 minutes if your catalog is already clean, longer if product descriptions need work. Agentic storefronts are active by default for eligible stores, so step one is often confirmation rather than activation.</p>
+  </div>
+
+  <div class="step-list">
+    <div class="step-item">
+      <div class="step-num-col"><span class="step-n">1</span></div>
+      <div class="step-body">
+        <div class="step-title">Check eligibility, per channel <span class="step-req-tag sr-req">start here</span></div>
+        <div class="step-desc">Shopify admin &rarr; <strong>Sales channels &rarr; Agentic</strong>. Read your row in the matrix above before assuming a single yes or no &mdash; you may be eligible for three channels and not the fourth, and Google remains in early access even where you qualify on paper.</div>
+        <span class="step-time">&#9203; 2 minutes</span>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num-col"><span class="step-n">2</span></div>
+      <div class="step-body">
+        <div class="step-title">Install the Knowledge Base app <span class="step-req-tag sr-rec">free</span></div>
+        <div class="step-desc">Published by Shopify, <strong>free</strong>, and invisible on your storefront. It is the data source AI assistants read when a shopper asks about returns, sizing or shipping. See section 5 for what to put in it &mdash; most merchants install it and write nothing, which wastes the only lever they have over what AI says about them.</div>
+        <span class="step-time">&#9203; 20&ndash;30 minutes</span>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num-col"><span class="step-n">3</span></div>
+      <div class="step-body">
+        <div class="step-title">Get server-side tracking live <span class="step-req-tag sr-req">before enabling</span></div>
+        <div class="step-desc">Out of order, this one costs money. Direct checkout fires only server-to-server events, so any agentic revenue earned before your server-side setup exists is permanently unattributed. See section 3.</div>
+        <span class="step-time">&#9203; ~1 hour</span>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num-col"><span class="step-n">4</span></div>
+      <div class="step-body">
+        <div class="step-title">Audit your catalog against the unsupported list <span class="step-req-tag sr-rec">recommended</span></div>
+        <div class="step-desc">Subscriptions, bundles, digital products, customizable products and B2B-only products cannot go through direct checkout. Work out which of your products that covers, and remember it does not constrain ChatGPT traffic at all &mdash; a subscription brand is not locked out of agentic commerce, it is locked out of three of the four channels&rsquo; checkout.</div>
+        <span class="step-time">&#9203; Depends on catalog size</span>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num-col"><span class="step-n">5</span></div>
+      <div class="step-body">
+        <div class="step-title">Write product data for conversation, not keywords <span class="step-req-tag sr-rec">recommended</span></div>
+        <div class="step-desc">A product called &ldquo;Blue Sneaker&rdquo; loses to &ldquo;Men&rsquo;s Wide-Fit Running Sneaker &mdash; Breathable Mesh, Cushioned Sole, UK 7&ndash;13&rdquo; when someone asks for a comfortable wide-fit running shoe. See section 6.</div>
+        <span class="step-time">&#9203; Variable</span>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num-col"><span class="step-n">6</span></div>
+      <div class="step-body">
+        <div class="step-title">Enable, verify, monitor <span class="step-req-tag sr-new">activation</span></div>
+        <div class="step-desc">Agree to the Supplemental Terms and toggle each channel individually. Use <strong>Test Agent</strong> to confirm products surface correctly, then filter your Orders list by channel. The dashboard also exposes the queries shoppers typed before finding you &mdash; unfiltered intent language, and the most useful by-product of the whole feature.</div>
+        <span class="step-time">&#9203; 5 minutes, then ongoing</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ KNOWLEDGE BASE ═══════ -->
+  <div class="sec-mark" id="knowledge-base">05 &mdash; The Knowledge Base app</div>
+  <div class="prose">
+    <h2>What to actually write in the Knowledge Base</h2>
+    <div class="vbox green">
+      <strong>It is free.</strong> {kb.priceNote} Published by Shopify on {prettyDate(kb.launched)}: <a href={kb.source} target="_blank" rel="noopener">App Store listing &#8599;</a>
+    </div>
+    <p>Shopify describes it precisely: &ldquo;{kb.quote}&rdquo; Nothing you write appears on your storefront. It exists solely to be read by machines &mdash; which makes it the only place you get to speak directly to the model that will paraphrase you to a customer.</p>
+    <h3>FAQs &mdash; 15 to 20, written for the purchase decision</h3>
+    <p>Cover shipping times and costs, the return process in specifics rather than generalities, sizing and fit, materials and care, warranty, and what actually differentiates you. Write plainly. AI assistants paraphrase, and marketing tone survives paraphrasing badly &mdash; clarity survives it well.</p>
+    <h3>The customer-friendly version of your returns policy</h3>
+    <p>Your policies page is a legal document. This entry should be what the process actually involves: how long a refund takes, what &ldquo;free returns&rdquo; means in practice, the exceptions. This is what gets cited when a shopper asks whether you are safe to buy from.</p>
+    <h3>Brand voice, and compliance language</h3>
+    <p>Specify tone, phrases to use or avoid, and how to describe your core benefits. For supplements, medical devices or anything regulated this stops being a branding exercise: paraphrasing by an AI assistant can produce claims you are not allowed to make, and this is where you constrain that.</p>
+    <h3>Shipping and fulfilment specifics</h3>
+    <p>Processing times, carriers, tracked versus untracked, delivery estimates by region, international availability, and what happens when an order is late. &ldquo;3&ndash;5 business days&rdquo; is usable. &ldquo;Fast shipping&rdquo; is not.</p>
+  </div>
+
+  <!-- ═══════ PRODUCT DATA ═══════ -->
+  <div class="sec-mark" id="product-data">06 &mdash; Product data for AI discovery</div>
+  <div class="prose">
+    <h2>Writing product data an assistant can match</h2>
+    <p>AI assistants interpret intent rather than matching keywords, and they answer with whichever product they can most confidently describe. Thin data does not rank badly &mdash; it fails to be selected at all, because the model has nothing to say about it.</p>
+    <h3>Titles</h3>
+    <p><strong>Brand + product type + key differentiator + size or variant.</strong> Sixty to eighty characters. Use the words customers say out loud, not internal SKU language.</p>
+    <h3>Descriptions</h3>
+    <p>Two hundred words minimum. What it is in a plain first sentence, materials and specifications, who it is for and in what situation, how it compares to the obvious alternatives, care, and any certification. Short paragraphs and lists parse more reliably than dense prose.</p>
+    <h3>Variants and stock</h3>
+    <p>Assistants will not recommend what shows as out of stock. Five colours and eight sizes means forty defined combinations with real counts &mdash; &ldquo;multiple options available&rdquo; is invisible to a model trying to answer &ldquo;do they have it in a 10?&rdquo;.</p>
+    <h3>Metafields</h3>
+    <p>Material composition, care instructions, suitability, country of manufacture, certifications, compatible products. Metafields answer the specific question your description did not anticipate.</p>
+  </div>
+
+  <!-- ═══════ TIMELINE ═══════ -->
+  <div class="sec-mark" id="timeline">07 &mdash; How this feature got here</div>
+  <div class="prose">
+    <h2>Timeline</h2>
+    <p>Useful mainly for dating other people&rsquo;s advice: if a guide describes in-conversation ChatGPT checkout, it was written against the arrangement that ended on 24 March 2026.</p>
+  </div>
+  <ol class="tl">
+    {CHANNELS.timeline.map((t) => (
+      <li class="tl-item">
+        <span class="tl-date">{prettyDate(t.date)}</span>
+        <span class="tl-event">{t.event}</span>
+      </li>
+    ))}
+  </ol>
+
+  <!-- ═══════ NOT ELIGIBLE ═══════ -->
+  <div class="sec-mark" id="not-eligible">08 &mdash; Not eligible yet</div>
+  <div class="prose">
+    <h2>Four things worth doing before you qualify</h2>
+    <p>Discovery is already happening. AI assistants crawl the web and read Shopify Catalog regardless of your agentic settings &mdash; the feature adds checkout, not visibility. Everything below improves how you are described today, whether or not you can switch a channel on.</p>
+  </div>
+
+  <div class="prep-grid">
+    <div class="prep-card">
+      <span class="prep-icon">01</span>
+      <div class="prep-title">Populate the free Knowledge Base app</div>
+      <div class="prep-body">It is read through Shopify Catalog whether or not agentic checkout is active, so the FAQs you write today shape what assistants say about you today.</div>
+    </div>
+    <div class="prep-card">
+      <span class="prep-icon">02</span>
+      <div class="prep-title">Fix the catalog</div>
+      <div class="prep-body">Complete titles, descriptions past 200 words, every variant defined, stock accurate. Each product you improve becomes more selectable immediately, not on some future launch date.</div>
+    </div>
+    <div class="prep-card">
+      <span class="prep-icon">03</span>
+      <div class="prep-title">Add FAQPage structured data</div>
+      <div class="prep-body">JSON-LD <code>FAQPage</code> on posts and key product pages makes your answers directly parseable rather than something a crawler has to infer from layout.</div>
+    </div>
+    <div class="prep-card">
+      <span class="prep-icon">04</span>
+      <div class="prep-title">Get server-side tracking in place</div>
+      <div class="prep-body">The one with a deadline attached. <a href="/capi-shield/">CAPI Shield</a> is free and takes about an hour, and doing it now means day one of eligibility has no attribution hole in it.</div>
+    </div>
+  </div>
+
+  <Disclosure />
+
+  <div class="inline-cta">
+    <div class="ict-text">
+      <h4>Everything here runs on one free Make.com account</h4>
+      <p>Server-side tracking, inventory logging and live P&amp;L all come off a single Shopify order webhook. The free plan covers 1,000 credits a month, with no card.</p>
+    </div>
+    <a href="/go/make/?source=shopify-agentic-storefronts-setup-guide--agentic-mid" class="btn btn-p" target="_blank" rel="noopener sponsored" data-cta-position="agentic-mid">Start free on Make.com &rarr; <span class="aff-mark">affiliate</span></a>
+  </div>
+
+  <!-- ═══════ FAQ ═══════ -->
+  <div class="sec-mark" id="faq">FAQ &mdash; {FAQ.length} questions</div>
+  <div class="prose"><h2>Shopify Agentic Storefronts &mdash; questions merchants actually ask</h2></div>
+  <div class="faq-list">
+    {FAQ.map((item) => (
+      <details class="faq-item">
+        <summary>{item.q}<span class="faq-ico"></span></summary>
+        <div class="faq-ans"><p>{item.a}</p></div>
+      </details>
+    ))}
+  </div>
+
+  <!-- ═══════ RELATED ═══════ -->
+  <div class="sec-mark" id="related">Related guides</div>
+  <div class="related-grid">
+    <a href="/capi-shield/" class="related-card">
+      <span class="rc-type">Free tool</span>
+      <span class="rc-title">CAPI Shield &mdash; free server-side tracking</span>
+      <span class="rc-desc">Meta and Google server-side events from one Make.com webhook. The fix for the agentic attribution gap in section 3.</span>
+    </a>
+    <a href="/blog/shopify-server-side-tracking-complete-setup-guide/" class="related-card">
+      <span class="rc-type">Guide</span>
+      <span class="rc-title">Shopify server-side tracking &mdash; complete setup</span>
+      <span class="rc-desc">The full walkthrough behind that fix: Meta CAPI, Google server-side tagging and TikTok Events API.</span>
+    </a>
+    <a href="/shopify-google-ads-conversion-tracking/" class="related-card">
+      <span class="rc-type">Free tool</span>
+      <span class="rc-title">Google Ads Enhanced Conversions &mdash; free</span>
+      <span class="rc-desc">Hashed email sent server-side to Google Ads, bypassing the click-ID loss that breaks browser attribution.</span>
+    </a>
+    <a href="/ultimate-shopify-automation-guide/" class="related-card">
+      <span class="rc-type">Free guide</span>
+      <span class="rc-title">Ultimate Shopify automation guide</span>
+      <span class="rc-desc">The whole $0 stack in deploy order &mdash; tracking, inventory, P&amp;L and email.</span>
+    </a>
+  </div>
+
+  <!-- ═══════ FINAL CTA ═══════ -->
+  <div class="final-cta">
+    <div class="final-eyebrow">free &mdash; no account required</div>
+    <div class="final-title">Attributed agentic revenue,<br><span class="p">or invisible agentic revenue</span></div>
+    <p class="final-sub">Direct checkout fires only server-to-server events. Get server-side tracking live before you enable the channels and there is no gap to reconstruct later. CAPI Shield is free and runs on Make.com&rsquo;s free tier.</p>
+    <div class="final-btns">
+      <a href="/capi-shield/" class="btn btn-g">Deploy CAPI Shield &mdash; free &rarr;</a>
+      <a href="/go/make/?source=shopify-agentic-storefronts-setup-guide--agentic-final" class="btn btn-p" target="_blank" rel="noopener sponsored" data-cta-position="agentic-final">Start free on Make.com &rarr; <span class="aff-mark">affiliate</span></a>
+    </div>
+  </div>
+
+  <div class="src-block">
+    <div class="src-head">Sources &mdash; every claim above</div>
+    <ul class="src-list">
+      {[...new Set(CHANNELS.channels.map((c) => c.source).concat([limits.source, kb.source]))].map((s) => (
+        <li><a href={s} target="_blank" rel="noopener">{s.replace(/^https?:\/\//, '')}</a></li>
+      ))}
+    </ul>
+    <p class="src-note">Verified {prettyDate(CHANNELS.verifiedDate)}. Shopify changes this documentation often; where our reading and theirs disagree, theirs is authoritative. Corrections: <a href="/how-we-test/">how we test and disclose</a>.</p>
+  </div>
+
+</div><!-- /.sa-agentic -->
+</div><!-- /.article-outer -->
+</main>
+
+<!-- ══════════════════════════════════════════
+  FOOTER
+══════════════════════════════════════════ -->
+
+<!-- ══════════════════════════════════════════
+  SCRIPTS
+══════════════════════════════════════════ -->
+
+
+</Base>
+
+<style is:global>
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; overscroll-behavior-x: none; -webkit-font-smoothing: antialiased; }
+    body { margin: 0; background: #0c0f0d; color: #93a09a; font-family: 'Inter', -apple-system, sans-serif; }
+    a { text-decoration: none; }
+    h1,h2,h3,h4,h5,h6 { margin: 0; font-weight: normal; }
+    p { margin: 0; }
+    ul { margin: 0; }
+
+    /* ── BREADCRUMB ── */
+    .sa-breadcrumb {
+      max-width: 1100px; margin: 0 auto; padding: 10px 24px;
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      font-family: 'Inter', sans-serif; font-size: 12px; color: #93a09a;
+    }
+    .sa-breadcrumb a { color: #93a09a; text-decoration: none; transition: color .2s; }
+    .sa-breadcrumb a:hover { color: #f2f5f3; }
+    .sa-breadcrumb .bc-sep { color: #2f3733; }
+    .sa-breadcrumb .bc-current { color: #93a09a; }
+
+    /* ── BLOG TITLE BAND ──
+       Was rgb(2,6,23) — a navy that appears nowhere else on the site and read
+       as a different site's page dropped into this one. Both bands now use the
+       shared --color-bg (#0c0f0d). */
+    .blog-title-band {
+      background: #0c0f0d; padding: 44px 24px 0; text-align: center;
+    }
+    .blog-title-band h1 {
+      font-family: 'Sora', 'Inter', sans-serif; font-size: clamp(26px, 4.4vw, 42px);
+      font-weight: 700; letter-spacing: -.03em;
+      color: #f2f5f3; max-width: 860px; margin: 0 auto; line-height: 1.08;
+    }
+    .band-meta {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: .1em;
+      text-transform: uppercase; color: #93a09a; margin: 16px auto 0;
+    }
+
+    /* ── ARTICLE WRAPPER ── */
+    .article-outer { background: #0c0f0d; padding: 32px 40px 80px; }
+    @media (max-width: 600px) { .article-outer { padding: 20px 16px 60px; } }
+
+    /* ── SA-AGENTIC COMPONENT ── */
+    .sa-agentic {
+      font-family: 'Inter', -apple-system, sans-serif; color: #93a09a;
+      line-height: 1.75; -webkit-font-smoothing: antialiased;
+      background: transparent; max-width: 900px; margin: 0 auto;
+      --bg:     #0c0f0d; --bg-2:   #0f1311; --bg-3:   #121614; --bg-4:   #171c19;
+      --border:   #222825; --border-2: #2f3733;
+      --text:   #f2f5f3; --text-2: #b6c0ba; --text-3: #93a09a; --text-4: #93a09a;
+      --g:        #34d377; --g-dim:    #15803d; --g-bg: rgba(52,211,119,.08); --g-border: rgba(52,211,119,.2);
+      --sky:      #8ccfe8; --sky-bg: rgba(140,207,232,.07); --sky-border: rgba(140,207,232,.18);
+      --amber:    #f5b64d; --amber-bg: rgba(245,182,77,.08); --amber-border: rgba(245,182,77,.2);
+      --red:      #f08a8a; --red-bg: rgba(240,138,138,.07); --red-border: rgba(240,138,138,.18);
+      --purple:   #c3b8ef; --purple-bg: rgba(195,184,239,.07); --purple-border: rgba(195,184,239,.18);
+      --mono: 'JetBrains Mono', monospace;
+    }
+    .sa-agentic .hero {
+      padding: 60px 24px 44px; text-align: center; position: relative;
+      overflow: hidden; background: var(--bg); border-radius: 14px;
+      border: 1px solid var(--border); margin-bottom: 44px;
+    }
+    .sa-agentic .hero::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 100% 60% at 50% -5%, rgba(195,184,239,.08) 0%, transparent 55%),
+                  radial-gradient(ellipse 50% 40% at 20% 100%, rgba(52,211,119,.04) 0%, transparent 50%);
+    }
+    .sa-agentic .hero-eyebrow {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: rgba(195,184,239,.06); border: 1px solid var(--purple-border);
+      border-radius: 100px; padding: 7px 18px; margin-bottom: 28px; position: relative;
+    }
+    .sa-agentic .hero-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--purple);
+      box-shadow: 0 0 10px var(--purple); animation: pulse-p 2s infinite;
+    }
+    @keyframes pulse-p { 0%,100%{opacity:1;box-shadow:0 0 10px var(--purple);} 50%{opacity:.4;box-shadow:0 0 4px var(--purple);} }
+    .sa-agentic .hero-eyebrow-txt {
+      font-family: var(--mono); font-size: 10px; font-weight: 700;
+      letter-spacing: .14em; text-transform: uppercase; color: var(--purple);
+    }
+    .sa-agentic .hero h1 {
+      font-size: clamp(26px, 5.2vw, 54px); font-weight: 700; color: var(--text);
+      letter-spacing: -.04em; line-height: .94; margin: 0 auto 20px; max-width: 800px; position: relative;
+    }
+    .sa-agentic .hero h1 .p { color: var(--purple); }
+    .sa-agentic .hero h1 .g { color: var(--g); }
+    .sa-agentic .hero h1 .sky { color: var(--sky); }
+    .sa-agentic .hero-deck {
+      font-size: clamp(15px, 2vw, 18px); color: var(--text-3); max-width: 620px;
+      margin: 0 auto 30px; line-height: 1.8; position: relative;
+    }
+    .sa-agentic .hero-deck strong { color: var(--text-2); font-weight: 600; }
+    .sa-agentic .channels-strip {
+      display: flex; justify-content: center; align-items: center;
+      gap: 10px; flex-wrap: wrap; margin-bottom: 28px; position: relative;
+    }
+    .sa-agentic .ch-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-family: var(--mono); font-size: 10px; font-weight: 700;
+      letter-spacing: .1em; text-transform: uppercase; padding: 6px 14px; border-radius: 6px;
+    }
+    .sa-agentic .ch-gpt   { background: var(--g-bg);      border: 1px solid var(--g-border);      color: var(--g); }
+    .sa-agentic .ch-goog  { background: var(--sky-bg);    border: 1px solid var(--sky-border);    color: var(--sky); }
+    .sa-agentic .ch-ms    { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+    .sa-agentic .ch-perp  { background: var(--amber-bg);  border: 1px solid var(--amber-border);  color: var(--amber); }
+    .sa-agentic .ch-dot   { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .7; }
+    .sa-agentic .stat-strip {
+      display: grid; grid-template-columns: repeat(4,1fr); gap: 1px;
+      background: var(--border); border: 1px solid var(--border); border-radius: 10px;
+      overflow: hidden; max-width: 680px; margin: 0 auto 30px; position: relative;
+    }
+    .sa-agentic .stat-cell { background: var(--bg); padding: 14px 10px; text-align: center; }
+    .sa-agentic .stat-v { font-family: var(--mono); font-size: 18px; font-weight: 700; line-height: 1; display: block; }
+    .sa-agentic .stat-v.p { color: var(--purple); }
+    .sa-agentic .stat-v.g { color: var(--g); }
+    .sa-agentic .stat-v.sky { color: var(--sky); }
+    .sa-agentic .stat-v.a { color: var(--amber); }
+    .sa-agentic .stat-l { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-4); margin-top: 5px; display: block; }
+    .sa-agentic .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; position: relative; }
+    .sa-agentic .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
+      text-decoration: none; padding: 12px 22px; border-radius: 7px;
+      transition: all .2s; min-height: 44px; white-space: nowrap;
+    }
+    .sa-agentic .btn-p   { background: var(--purple); color: #0c0f0d; }
+    .sa-agentic .btn-p:hover { background: #d8b4fe; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(195,184,239,.25); }
+    .sa-agentic .btn-g   { background: var(--g); color: #0c0f0d; }
+    .sa-agentic .btn-g:hover { background: #45e28a; transform: translateY(-2px); }
+    .sa-agentic .btn-o   { background: transparent; color: var(--text-2); border: 1.5px solid var(--border-2); }
+    .sa-agentic .btn-o:hover { border-color: var(--purple); color: var(--purple); }
+    .sa-agentic .toc {
+      background: var(--bg-3); border: 1.5px solid var(--purple-border);
+      border-radius: 12px; padding: 22px 26px; margin-bottom: 48px;
+    }
+    .sa-agentic .toc-head { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: var(--purple); margin-bottom: 16px; }
+    .sa-agentic .toc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 28px; }
+    .sa-agentic .toc-item { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--text-3); text-decoration: none; padding: 4px 0; transition: color .15s; line-height: 1.4; }
+    .sa-agentic .toc-item:hover { color: var(--purple); }
+    .sa-agentic .toc-n { font-family: var(--mono); font-size: 10px; color: var(--text-4); min-width: 20px; flex-shrink: 0; }
+    .sa-agentic .toc-tag { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; padding: 1px 6px; border-radius: 3px; margin-left: 4px; flex-shrink: 0; }
+    .sa-agentic .tt-req   { background: var(--red-bg);    border: 1px solid var(--red-border);    color: var(--red); }
+    .sa-agentic .tt-new   { background: var(--g-bg);      border: 1px solid var(--g-border);      color: var(--g); }
+    .sa-agentic .tt-imp   { background: var(--amber-bg);  border: 1px solid var(--amber-border);  color: var(--amber); }
+    .sa-agentic .sec-mark {
+      display: flex; align-items: center; gap: 14px;
+      font-family: var(--mono); font-size: 9px; letter-spacing: .2em;
+      text-transform: uppercase; color: var(--text-4); margin: 60px 0 24px;
+    }
+    .sa-agentic .sec-mark::before { content: ''; width: 32px; height: 1px; background: var(--purple); flex-shrink: 0; }
+    .sa-agentic .sec-mark::after  { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .sa-agentic .prose { font-size: 16px; color: var(--text-3); line-height: 1.85; }
+    .sa-agentic .prose h2 { font-size: clamp(19px, 2.8vw, 27px); font-weight: 700; color: var(--text); letter-spacing: -.028em; margin: 52px 0 14px; line-height: 1.08; }
+    .sa-agentic .prose h3 { font-size: clamp(15px, 2vw, 20px); font-weight: 700; color: var(--text-2); letter-spacing: -.015em; margin: 34px 0 10px; }
+    .sa-agentic .prose p { margin-bottom: 18px; }
+    .sa-agentic .prose p:last-child { margin-bottom: 0; }
+    .sa-agentic .prose strong { color: var(--text-2); font-weight: 600; }
+    .sa-agentic .prose em { font-style: italic; }
+    .sa-agentic .prose a { color: var(--purple); text-decoration: underline; }
+    .sa-agentic .prose ul, .sa-agentic .prose ol { padding-left: 20px; margin-bottom: 18px; display: flex; flex-direction: column; gap: 8px; }
+    .sa-agentic .prose li { font-size: 15px; color: var(--text-3); line-height: 1.65; }
+    .sa-agentic .prose li::marker { color: var(--purple); }
+    .sa-agentic .callout {
+      border-radius: 10px; padding: 17px 21px 17px 23px; margin: 22px 0;
+      border-left: 3px solid var(--purple); background: var(--purple-bg);
+      border-right: 1px solid var(--purple-border); border-top: 1px solid var(--purple-border); border-bottom: 1px solid var(--purple-border);
+    }
+    .sa-agentic .callout.green { border-left-color: var(--g); background: var(--g-bg); border-color: var(--g-border); border-left-width: 3px; }
+    .sa-agentic .callout.amber { border-left-color: var(--amber); background: var(--amber-bg); border-color: var(--amber-border); border-left-width: 3px; }
+    .sa-agentic .callout.red   { border-left-color: var(--red);   background: var(--red-bg);   border-color: var(--red-border); border-left-width: 3px; }
+    .sa-agentic .callout.sky   { border-left-color: var(--sky);   background: var(--sky-bg);   border-color: var(--sky-border); border-left-width: 3px; }
+    .sa-agentic .callout-label { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--purple); margin-bottom: 6px; display: block; }
+    .sa-agentic .callout.green .callout-label { color: var(--g); }
+    .sa-agentic .callout.amber .callout-label { color: var(--amber); }
+    .sa-agentic .callout.red   .callout-label { color: var(--red); }
+    .sa-agentic .callout.sky   .callout-label { color: var(--sky); }
+    .sa-agentic .callout p { font-size: 14px; color: var(--text-2); line-height: 1.7; margin: 0; }
+    .sa-agentic .callout p strong { color: var(--text); }
+    .sa-agentic .callout p a { color: var(--purple); text-decoration: underline; }
+    .sa-agentic .callout.green p a { color: var(--g); }
+    .sa-agentic .callout.sky p a { color: var(--sky); }
+    .sa-agentic .step-list { display: flex; flex-direction: column; gap: 0; margin: 24px 0 32px; }
+    .sa-agentic .step-item { display: flex; gap: 0; border: 1px solid var(--border); border-bottom: none; background: var(--bg-2); position: relative; transition: background .15s; }
+    .sa-agentic .step-item:first-child { border-radius: 10px 10px 0 0; }
+    .sa-agentic .step-item:last-child  { border-radius: 0 0 10px 10px; border-bottom: 1px solid var(--border); }
+    .sa-agentic .step-item:hover { background: rgba(195,184,239,.025); border-color: rgba(195,184,239,.15); }
+    .sa-agentic .step-num-col { width: 56px; min-width: 56px; display: flex; align-items: flex-start; justify-content: center; padding: 20px 0; border-right: 1px solid var(--border); flex-shrink: 0; }
+    .sa-agentic .step-n { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--purple); width: 28px; height: 28px; border-radius: 50%; border: 1.5px solid var(--purple-border); background: var(--purple-bg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .sa-agentic .step-body { padding: 18px 20px; flex: 1; }
+    .sa-agentic .step-title { font-size: 15px; font-weight: 700; color: var(--text-2); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; line-height: 1.3; }
+    .sa-agentic .step-desc { font-size: 14px; color: var(--text-3); line-height: 1.7; }
+    .sa-agentic .step-desc strong { color: var(--text-2); font-weight: 600; }
+    .sa-agentic .step-desc a { color: var(--purple); text-decoration: underline; }
+    .sa-agentic .step-time { font-family: var(--mono); font-size: 9px; color: var(--text-4); margin-top: 8px; display: block; }
+    .sa-agentic .step-req-tag { font-family: var(--mono); font-size: 8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; }
+    .sa-agentic .sr-req  { background: var(--red-bg);    border: 1px solid var(--red-border);    color: var(--red); }
+    .sa-agentic .sr-opt  { background: var(--amber-bg);  border: 1px solid var(--amber-border);  color: var(--amber); }
+    .sa-agentic .sr-rec  { background: var(--g-bg);      border: 1px solid var(--g-border);      color: var(--g); }
+    .sa-agentic .sr-new  { background: var(--purple-bg); border: 1px solid var(--purple-border); color: var(--purple); }
+    .sa-agentic .elig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
+    .sa-agentic .elig-card { background: var(--bg-2); border: 1.5px solid var(--border); border-radius: 10px; padding: 18px; }
+    .sa-agentic .elig-card.yes { border-color: var(--g-border); background: var(--g-bg); }
+    .sa-agentic .elig-card.no  { border-color: var(--red-border); background: var(--red-bg); }
+    .sa-agentic .elig-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .sa-agentic .elig-card.yes .elig-title { color: var(--g); }
+    .sa-agentic .elig-card.no  .elig-title { color: var(--red); }
+    .sa-agentic .elig-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+    .sa-agentic .elig-list li { font-size: 13px; color: var(--text-3); display: flex; gap: 8px; align-items: baseline; line-height: 1.5; }
+    .sa-agentic .elig-card.yes .elig-list li::before { content: '\2713'; font-family: var(--mono); font-size: 10px; color: var(--g); flex-shrink: 0; }
+    .sa-agentic .elig-card.no  .elig-list li::before { content: '\2717'; font-family: var(--mono); font-size: 10px; color: var(--red); flex-shrink: 0; }
+    .sa-agentic .channel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
+    .sa-agentic .ch-card { background: var(--bg-2); border: 1.5px solid var(--border); border-radius: 10px; padding: 18px; }
+    .sa-agentic .ch-card.gpt  { border-color: var(--g-border); }
+    .sa-agentic .ch-card.goog { border-color: var(--sky-border); }
+    .sa-agentic .ch-card.ms   { border-color: var(--purple-border); }
+    .sa-agentic .ch-card.perp { border-color: var(--amber-border); }
+    .sa-agentic .ch-name { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 4px; letter-spacing: -.01em; }
+    .sa-agentic .ch-card.gpt  .ch-name { color: var(--g); }
+    .sa-agentic .ch-card.goog .ch-name { color: var(--sky); }
+    .sa-agentic .ch-card.ms   .ch-name { color: var(--purple); }
+    .sa-agentic .ch-card.perp .ch-name { color: var(--amber); }
+    .sa-agentic .ch-status { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; margin-bottom: 10px; }
+    .sa-agentic .ch-card.gpt  .ch-status { color: var(--g); }
+    .sa-agentic .ch-card.goog .ch-status { color: var(--sky); }
+    .sa-agentic .ch-card.ms   .ch-status { color: var(--purple); }
+    .sa-agentic .ch-card.perp .ch-status { color: var(--amber); }
+    .sa-agentic .ch-desc { font-size: 13px; color: var(--text-3); line-height: 1.6; }
+    .sa-agentic .table-wrap { overflow-x: auto; margin: 8px 0 26px; border-radius: 10px; }
+
+    /* ══ THE MATRIX ══════════════════════════════════════════════════════
+       The page's citable artefact. Requirements it has to meet: readable at
+       390px without the page scrolling sideways (the table scrolls in its own
+       box), every row traceable to a Shopify URL, and the checkout model
+       legible at a glance — that column is the whole point of the table. */
+    .sa-agentic .matrix-table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 720px; }
+    .sa-agentic .tbl-caption {
+      caption-side: top; text-align: left; font-family: var(--mono); font-size: 11px;
+      letter-spacing: .06em; color: var(--text-4); padding: 0 0 10px; line-height: 1.6;
+    }
+    .sa-agentic .matrix-table th[scope="col"] {
+      font-family: var(--mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--text-4); padding: 12px 14px; text-align: left; vertical-align: bottom;
+      background: var(--bg-3); border-bottom: 1px solid var(--border-2);
+    }
+    .sa-agentic .matrix-table td,
+    .sa-agentic .matrix-table th[scope="row"] {
+      padding: 14px; border-bottom: 1px solid var(--border); color: var(--text-3);
+      vertical-align: top; line-height: 1.55; text-align: left; font-weight: 400;
+    }
+    .sa-agentic .matrix-table th[scope="row"] { color: var(--text); font-weight: 700; white-space: nowrap; }
+    .sa-agentic .matrix-table tr:last-child td,
+    .sa-agentic .matrix-table tr:last-child th { border-bottom: none; }
+    .sa-agentic .row-out td, .sa-agentic .row-out th[scope="row"] { opacity: .72; }
+    .sa-agentic .cell-src {
+      display: block; font-family: var(--mono); font-size: 10px; font-weight: 400;
+      letter-spacing: .06em; color: var(--text-4); margin-top: 5px; text-decoration: underline;
+      text-underline-offset: 2px;
+    }
+    .sa-agentic .cell-src:hover { color: var(--purple); }
+    .sa-agentic .ck {
+      display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700;
+      letter-spacing: .04em; padding: 4px 9px; border-radius: 4px; white-space: nowrap;
+    }
+    .sa-agentic .ck-direct   { background: var(--g-bg);      border: 1px solid var(--g-border);      color: var(--g); }
+    .sa-agentic .ck-redirect { background: var(--sky-bg);    border: 1px solid var(--sky-border);    color: var(--sky); }
+    .sa-agentic .ck-outside-shopify { background: var(--red-bg); border: 1px solid var(--red-border); color: var(--red); }
+
+    /* ══ LIMITS GRID ══ */
+    .sa-agentic .lim-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; margin: 22px 0 26px; }
+    .sa-agentic .lim-card { background: var(--bg-2); border: 1.5px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+    .sa-agentic .lim-card.lim-ok { border-color: var(--g-border); background: var(--g-bg); }
+    .sa-agentic .lim-h {
+      font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--red); margin-bottom: 12px;
+    }
+    .sa-agentic .lim-card.lim-ok .lim-h { color: var(--g); }
+    .sa-agentic .lim-ul { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 7px; }
+    .sa-agentic .lim-ul li { font-size: 14px; color: var(--text-2); line-height: 1.5; display: flex; gap: 9px; }
+    .sa-agentic .lim-ul li::before { content: '\2717'; font-family: var(--mono); font-size: 11px; color: var(--red); flex-shrink: 0; }
+    .sa-agentic .lim-card.lim-ok .lim-ul li::before { content: '\2713'; color: var(--g); }
+    .sa-agentic .lim-quote { font-size: 13px; color: var(--text-3); line-height: 1.65; margin: 12px 0 0; font-style: italic; }
+
+    /* ══ PULL QUOTE — the sourced limitation, given weight ══ */
+    .sa-agentic .pull-quote {
+      margin: 24px 0 26px; padding: 22px 26px; border-left: 3px solid var(--red);
+      background: var(--red-bg); border-radius: 0 10px 10px 0;
+      font-size: 17px; line-height: 1.7; color: var(--text-2);
+    }
+    .sa-agentic .pull-quote cite {
+      display: block; margin-top: 12px; font-style: normal;
+      font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: var(--text-4);
+    }
+    .sa-agentic .pull-quote cite a { color: var(--text-3); text-decoration: underline; text-underline-offset: 2px; }
+    .sa-agentic .pull-quote cite a:hover { color: var(--red); }
+
+    /* ══ TIMELINE ══ */
+    .sa-agentic .tl { list-style: none; padding: 0; margin: 20px 0 28px; display: flex; flex-direction: column; gap: 1px;
+      background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .sa-agentic .tl-item { background: var(--bg-2); padding: 14px 18px; display: flex; gap: 18px; align-items: baseline; flex-wrap: wrap; }
+    .sa-agentic .tl-date { font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--purple); min-width: 140px; flex-shrink: 0; }
+    .sa-agentic .tl-event { font-size: 14px; color: var(--text-3); line-height: 1.6; flex: 1; min-width: 200px; }
+
+    /* ══ SOURCES ══ */
+    .sa-agentic .src-block { margin-top: 40px; padding: 22px 24px; background: var(--bg-2); border: 1px solid var(--border); border-radius: 10px; }
+    .sa-agentic .src-head { font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--text-4); margin-bottom: 12px; }
+    .sa-agentic .src-list { list-style: none; padding: 0; margin: 0 0 14px; display: flex; flex-direction: column; gap: 7px; }
+    .sa-agentic .src-list a { font-family: var(--mono); font-size: 12px; color: var(--text-3); text-decoration: underline; text-underline-offset: 2px; word-break: break-all; line-height: 1.5; }
+    .sa-agentic .src-list a:hover { color: var(--purple); }
+    .sa-agentic .src-note { font-size: 13px; color: var(--text-4); line-height: 1.65; margin: 0; }
+    .sa-agentic .src-note a { color: var(--text-3); text-decoration: underline; }
+
+    /* ══ THE OPENING ANSWER ══
+       Carries the 40–60 word self-contained answer every indexable page opens
+       with. Sized up because it is the paragraph most likely to be quoted back
+       by an assistant, and the one a human decides on. */
+    .sa-agentic .sa-answer {
+      font-size: clamp(17px, 2.1vw, 20px); line-height: 1.7; color: var(--text-2);
+      border-left: 3px solid var(--g); background: var(--g-bg);
+      padding: 20px 24px; border-radius: 0 10px 10px 0; margin: 0 0 8px;
+    }
+
+    @media (max-width: 700px) {
+      .sa-agentic .lim-grid { grid-template-columns: minmax(0,1fr); }
+      .sa-agentic .pull-quote { font-size: 15px; padding: 18px 20px; }
+      .sa-agentic .tl-date { min-width: 0; }
+    }
+    .sa-agentic .lim-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 500px; }
+    .sa-agentic .lim-table thead tr { background: var(--bg-3); }
+    .sa-agentic .lim-table th { font-family: var(--mono); font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-4); padding: 11px 14px; border-bottom: 1px solid var(--border-2); text-align: left; white-space: nowrap; }
+    .sa-agentic .lim-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); color: var(--text-3); vertical-align: top; line-height: 1.5; }
+    .sa-agentic .lim-table tr:hover td { background: rgba(255,255,255,.015); }
+    .sa-agentic .lim-table .col-lim { color: var(--text-2); font-weight: 600; }
+    .sa-agentic .lim-table .col-impact { color: var(--amber); font-family: var(--mono); font-size: 11px; }
+    .sa-agentic .lim-table .col-fix { color: var(--g); font-size: 13px; }
+    .sa-agentic .table-note { font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .05em; margin-bottom: 24px; line-height: 1.6; }
+    .sa-agentic .inline-cta {
+      background: var(--purple-bg); border: 1.5px solid var(--purple-border);
+      border-radius: 12px; padding: 22px 26px; display: flex; align-items: center;
+      justify-content: space-between; gap: 18px; flex-wrap: wrap; margin: 40px 0;
+    }
+    .sa-agentic .inline-cta.green { border-color: var(--g-border); background: var(--g-bg); }
+    .sa-agentic .inline-cta.sky   { border-color: var(--sky-border); background: var(--sky-bg); }
+    .sa-agentic .inline-cta.amber { border-color: var(--amber-border); background: var(--amber-bg); }
+    .sa-agentic .ict-text h4 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 3px; }
+    .sa-agentic .ict-text p  { font-size: 13px; color: var(--text-3); margin: 0; }
+    .sa-agentic .vbox { background: var(--bg-3); border: 1px solid var(--border); border-left: 3px solid var(--purple); border-radius: 0 8px 8px 0; padding: 14px 18px; font-size: 14px; color: var(--text-3); line-height: 1.75; margin: 18px 0; }
+    .sa-agentic .vbox strong { color: var(--text-2); font-weight: 600; }
+    .sa-agentic .vbox a { color: var(--purple); text-decoration: underline; }
+    .sa-agentic .vbox.green { border-left-color: var(--g); }
+    .sa-agentic .vbox.green a { color: var(--g); }
+    .sa-agentic .vbox.amber { border-left-color: var(--amber); }
+    .sa-agentic .prep-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 20px 0 28px; }
+    .sa-agentic .prep-card { background: var(--bg-2); border: 1.5px solid var(--border); border-radius: 10px; padding: 18px; transition: border-color .2s; }
+    .sa-agentic .prep-card:hover { border-color: var(--purple-border); }
+    .sa-agentic .prep-icon { font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--purple); margin-bottom: 8px; display: block; }
+    .sa-agentic .prep-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 8px; line-height: 1.2; }
+    .sa-agentic .prep-body { font-size: 13px; color: var(--text-3); line-height: 1.6; }
+    .sa-agentic .prep-body a { color: var(--purple); text-decoration: underline; }
+    .sa-agentic .faq-list { display: flex; flex-direction: column; gap: 8px; margin: 24px 0; }
+    .sa-agentic details.faq-item { border: 1.5px solid var(--border); border-radius: 10px; background: rgba(255,255,255,.015); transition: border-color .2s; }
+    .sa-agentic details.faq-item[open] { border-color: rgba(195,184,239,.3); background: rgba(195,184,239,.025); }
+    .sa-agentic details.faq-item summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 17px 22px; cursor: pointer; list-style: none; font-size: 14px; font-weight: 600; color: var(--text-3); min-height: 54px; line-height: 1.4; }
+    .sa-agentic details.faq-item summary::-webkit-details-marker { display: none; }
+    .sa-agentic details.faq-item[open] summary { color: var(--text); }
+    .sa-agentic .faq-ico { width: 14px; height: 14px; min-width: 14px; display: inline-block; flex-shrink: 0; position: relative; opacity: .4; }
+    .sa-agentic .faq-ico::before { content: ''; position: absolute; top: 2px; left: 1px; width: 9px; height: 9px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); transition: transform .25s; }
+    .sa-agentic details.faq-item[open] summary .faq-ico { opacity: 1; color: var(--purple); }
+    .sa-agentic details.faq-item[open] summary .faq-ico::before { transform: rotate(225deg); top: 5px; }
+    .sa-agentic .faq-ans { padding: 14px 22px 18px; font-size: 14px; color: var(--text-3); line-height: 1.78; border-top: 1px solid var(--border); }
+    .sa-agentic .faq-ans a { color: var(--purple); text-decoration: underline; }
+    .sa-agentic .faq-ans strong { color: var(--text-2); font-weight: 600; }
+    .sa-agentic .related-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; margin-top: 12px; }
+    .sa-agentic .related-card { background: var(--bg-3); border: 1.5px solid var(--border); border-radius: 10px; padding: 15px 17px; text-decoration: none; display: flex; flex-direction: column; gap: 4px; transition: border-color .2s, transform .2s; }
+    .sa-agentic .related-card:hover { border-color: var(--purple-border); transform: translateY(-2px); }
+    .sa-agentic .rc-type  { font-family: var(--mono); font-size: 9px; color: var(--text-4); letter-spacing: .14em; text-transform: uppercase; }
+    .sa-agentic .rc-title { font-size: 13px; font-weight: 700; color: var(--text); letter-spacing: -.01em; line-height: 1.3; }
+    .sa-agentic .rc-desc  { font-size: 12px; color: var(--text-3); line-height: 1.5; }
+    .sa-agentic .final-cta {
+      background: var(--bg-2); border: 1.5px solid var(--purple-border);
+      border-radius: 14px; padding: 52px 36px; text-align: center;
+      margin-top: 56px; position: relative; overflow: hidden;
+    }
+    .sa-agentic .final-cta::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(195,184,239,.07) 0%, transparent 65%);
+    }
+    .sa-agentic .final-eyebrow { font-family: var(--mono); font-size: 9px; letter-spacing: .2em; text-transform: uppercase; color: var(--purple); margin-bottom: 12px; position: relative; }
+    .sa-agentic .final-title { font-size: clamp(24px, 4.5vw, 44px); font-weight: 700; color: var(--text); letter-spacing: -.04em; line-height: .96; margin-bottom: 16px; position: relative; }
+    .sa-agentic .final-title .p { color: var(--purple); }
+    .sa-agentic .final-sub { font-size: 16px; color: var(--text-3); max-width: 520px; margin: 0 auto 28px; line-height: 1.75; position: relative; }
+    .sa-agentic .final-btns { display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; position: relative; }
+    .sa-agentic .disclosure { margin-top: 36px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 6px; font-family: var(--mono); font-size: 10px; color: var(--text-4); letter-spacing: .05em; line-height: 1.65; }
+    @media(max-width: 640px) {
+      .sa-agentic .stat-strip     { grid-template-columns: 1fr 1fr; }
+      .sa-agentic .toc-grid       { grid-template-columns: 1fr; }
+      .sa-agentic .elig-grid      { grid-template-columns: 1fr; }
+      .sa-agentic .channel-grid   { grid-template-columns: 1fr; }
+      .sa-agentic .prep-grid      { grid-template-columns: 1fr; }
+      .sa-agentic .related-grid   { grid-template-columns: 1fr; }
+      .sa-agentic .inline-cta     { flex-direction: column; }
+      .sa-agentic .inline-cta .btn { width: 100%; justify-content: center; }
+      .sa-agentic .hero-ctas      { flex-direction: column; align-items: stretch; max-width: 300px; margin-left: auto; margin-right: auto; }
+      .sa-agentic .hero-ctas .btn { justify-content: center; }
+      .sa-agentic .final-cta      { padding: 36px 20px; }
+    }
+
+  </style>

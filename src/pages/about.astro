@@ -1,0 +1,530 @@
+---
+import Base from '../layouts/Base.astro';
+import AuthorCard from '../components/AuthorCard.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+import FeaturedIn from '../components/FeaturedIn.astro';
+import PressCitation from '../components/PressCitation.astro';
+import { PRESS } from '../data/press';
+import {
+  STOCKLOG_PRICE,
+  STOCKLOG_UNIT,
+  STOCKLOG_URL,
+  formatMonthly,
+} from '../data/products';
+
+const quote = PRESS[0];
+
+// Hero layout under evaluation: 'a' = 150px portrait stacked above the H1,
+// 'b' = two-column split with the type bottom-aligned to the portrait.
+const HERO_VARIANT: 'a' | 'b' = 'a';
+
+const tocHeadings = [
+  {
+    "id": "where-this-knowledge-comes-from",
+    "text": "Where this knowledge comes from"
+  },
+  {
+    "id": "what-i-work-with-directly",
+    "text": "What I work with directly"
+  },
+  {
+    "id": "i-ship-products-not-just-guides",
+    "text": "I ship products, not just guides"
+  },
+  {
+    "id": "full-transparency",
+    "text": "Full transparency"
+  },
+  {
+    "id": "what-i-ve-built",
+    "text": "What I've built"
+  },
+  {
+    "id": "get-in-touch",
+    "text": "Get in touch"
+  }
+];
+
+/* ---------------------------------------------------------------------------
+ * STOCKLOG_SCHEMA — StockLog's SoftwareApplication node.
+ *
+ * Lifted out of the raw <script type="application/ld+json"> @graph below for
+ * one reason: Astro does not interpolate expressions inside a script element,
+ * so the two prices written there were literals that no constant could keep
+ * honest — the same defect that let the homepage ship the Kit at a retired
+ * $29. Handed to <Base schema={...}> instead, where STOCKLOG_PRICE reaches it.
+ *
+ * Both prices come from the one constant. The Offer states the charge and the
+ * UnitPriceSpecification states the period; they are not two facts, and they
+ * must not be two literals.
+ *
+ * No priceVerifiedDate / priceSourceUrl: those cite somebody else's number.
+ * StockLog is ours, so it carries the constant and the claims.json pin under
+ * `ours` instead — see the hard rule in CLAUDE.md.
+ * ------------------------------------------------------------------------ */
+const stockLogSchema = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  '@id': 'https://stocklog.onrender.com/#app',
+  name: 'StockLog',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Shopify',
+  url: STOCKLOG_URL,
+  description:
+    'Shopify inventory app that keeps a persistent stock ledger: decrements on orders, restocks on cancellations and refunds, imports Stocky CSV exports, and keeps a timestamped audit trail of every movement.',
+  author: { '@id': 'https://stackarchitect.xyz/#luke' },
+  publisher: { '@id': 'https://stackarchitect.xyz/#org' },
+  offers: {
+    '@type': 'Offer',
+    url: STOCKLOG_URL,
+    price: String(STOCKLOG_PRICE),
+    priceCurrency: 'USD',
+    availability: 'https://schema.org/InStock',
+    priceSpecification: {
+      '@type': 'UnitPriceSpecification',
+      price: String(STOCKLOG_PRICE),
+      priceCurrency: 'USD',
+      unitText: STOCKLOG_UNIT,
+    },
+  },
+};
+---
+<Base title="About Luke Sandelands — Founder, Stack Architect" description="Luke Sandelands builds free, open-source Shopify automation tools that replace paid apps. Hands-on with Make.com, Meta CAPI and Google Enhanced Conversions." schema={stockLogSchema}>
+<Fragment slot="head">
+<script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://stackarchitect.xyz/" },
+          { "@type": "ListItem", "position": 2, "name": "About", "item": "https://stackarchitect.xyz/about/" }
+        ]
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://stackarchitect.xyz/#website",
+        "url": "https://stackarchitect.xyz/",
+        "name": "Stack Architect",
+        "publisher": { "@id": "https://stackarchitect.xyz/#org" }
+      },
+      {
+        "@type": "ProfilePage",
+        "@id": "https://stackarchitect.xyz/about#webpage",
+        "url": "https://stackarchitect.xyz/about/",
+        "name": "About Luke Sandelands — Shopify Automation Specialist | Stack Architect",
+        "description": "Luke is a Shopify automation specialist and the creator of Stack Architect — free, open-source automation tools that replace paid Shopify apps. Works hands-on with Make.com, Meta CAPI, Google Enhanced Conversions, and TikTok Events API.",
+        "inLanguage": "en-GB",
+        "dateModified": "2026-08-11",
+        "isPartOf": { "@id": "https://stackarchitect.xyz/#website" },
+        "about": { "@id": "https://stackarchitect.xyz/#luke" },
+        "mainEntity": { "@id": "https://stackarchitect.xyz/#luke" },
+        "mentions": { "@id": "https://stocklog.onrender.com/#app" }
+      }
+    ]
+  }
+  </script>
+</Fragment>
+<div class="bc">
+  <a href="/">Home</a>
+  <span style="opacity:.4">/</span>
+  <span style="color:var(--text-3)">About</span>
+</div>
+
+<main id="main-content">
+
+  <!-- ── HERO ── -->
+  <div class="hero">
+    <div class="hero-inner">
+      <div class="tag">About the author</div>
+      <div class={`hero-id hero-id--${HERO_VARIANT}`}>
+        <img class="hero-portrait" src="/luke.jpg" alt="Luke Sandelands, founder of Stack Architect" width="150" height="150" loading="eager" fetchpriority="high" />
+        <div class="hero-id-text">
+          <h1>Luke Sandelands</h1>
+          <div class="hero-role">Shopify Automation Specialist</div>
+        </div>
+      </div>
+      <p id="answer" class="hero-lead">Luke Sandelands is a Shopify automation specialist and the founder of Stack Architect, which publishes free, open-source tools that replace paid Shopify apps. Every guide comes from hands-on implementation work — building Make.com scenarios, configuring Meta Conversions API and Google Enhanced Conversions, and testing each build in production stores before publishing.</p>
+      <p class="hero-lead">The same architecture that Elevar charges $225/month and Triple Whale charges $219+/month for is released here free, with the full source on GitHub, step-by-step setup, and no upsell.</p>
+      <div class="cred-strip">
+        <div class="cred"><span class="cred-dot"></span>Shopify automation specialist</div>
+        <div class="cred"><span class="cred-dot"></span>Make.com · Meta CAPI · Google Enhanced Conversions</div>
+        <div class="cred"><span class="cred-dot"></span>Open-source · No subscription · No upsell</div>
+        <div class="cred"><span class="cred-dot"></span>Based in the UK</div>
+        <a href="https://ecommercemanager.co/ecommerce/going-global-ecommerce-leaders-share-international-expansion-strategies/" target="_blank" rel="noopener" class="cred cred-link">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--g);flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          Featured in eCommerce Manager
+        </a>
+        <a href="https://www.linkedin.com/in/luke-stackarchitect" target="_blank" rel="noopener" class="cred cred-link">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--g);flex-shrink:0"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+          LinkedIn
+        </a>
+        <a href="https://github.com/lsb11/stackarchitect" target="_blank" rel="noopener" class="cred cred-link">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="color:var(--g);flex-shrink:0"><path d="M12 .5C5.7.5.5 5.7.5 12c0 5.1 3.3 9.4 7.9 10.9.6.1.8-.2.8-.5v-2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.7.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.6.8.5 4.6-1.5 7.9-5.8 7.9-10.9C23.5 5.7 18.3.5 12 .5z"/></svg>
+          GitHub
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <TableOfContents headings={tocHeadings} />
+
+  <FeaturedIn pressContext="Stack Architect's approach to replacing Shopify apps with server-side pipelines was covered by Leaders Perception in August 2026." />
+
+  <!-- ── BACKGROUND ── -->
+  <section class="section-alt">
+    <div class="inner">
+      <div class="sec-tag">Background &amp; experience</div>
+      <h2 id="where-this-knowledge-comes-from">Where this knowledge comes from</h2>
+      <p>Stack Architect exists because of a pattern I kept seeing in the Shopify ecosystem: store owners paying $145–$650/month for server-side tracking tools that do little more than route a <a href="https://shopify.dev/docs/api/admin-rest/2024-01/resources/webhook" target="_blank" rel="noopener">Shopify Order webhook</a> through an automation platform. I built the first version of CAPI Shield myself — configuring the <a href="https://developers.facebook.com/docs/marketing-api/conversions-api" target="_blank" rel="noopener">Meta Conversions API</a> directly via Make.com — and it sends the same server-side events to Meta that the paid tools do, at $0.</p>
+      <p>That pattern repeated across every category. Inventory management. P&amp;L reporting. TikTok Events API. Email automation. In every case, the paid app was charging monthly for configuration work that takes under 10 minutes to replicate directly. So I documented all of it — step by step, with the exact API endpoints, field mappings, and Make.com scenario structures — and published it free.</p>
+      <p>The full source for every tool is public on <a href="https://github.com/lsb11/stackarchitect" target="_blank" rel="noopener">GitHub</a>, so nothing here is a black box. Anything I describe can be inspected, forked, and rebuilt independently — which is more than any of the paid alternatives offer.</p>
+      <p><strong>Every number on this site is sourced or clearly framed.</strong> The Event Match Quality target (7+) is what well-matched server-side events typically achieve. Savings figures are calculated against current Shopify App Store pricing, checked regularly. The 20–40% signal-loss estimate this site used to carry was <strong>retracted on 4 September 2026</strong>: no source behind it measured that quantity, and the loss is store-specific in any case — <a href="/how-we-test/#the-20-40-figure">the full record is here</a>. We publish no loss figure and no recovery percentage — we have no first-party measurement of either. No fabricated metrics. No purchased reviews. No manufactured social proof. If a number isn't backed by a source, it isn't here.</p>
+      <!-- Was ~400 words of press prose naming the same five outlets already in
+           the logo row above, with six inline links buried mid-paragraph. Same
+           outlets, same links, same arguments — restructured as one citation per
+           contribution so a reader can scan them and a model can segment them.
+           Dofollow, matching the logo row above: the same five outlets were
+           carrying nofollow here and dofollow there, which misrepresented
+           genuine unpaid citations. Default set in PressCitation.astro. -->
+      <h3 class="press-heading">Press &amp; contributions</h3>
+      <div class="press-grid">
+        <PressCitation
+          outlet="eCommerce Manager"
+          title="Top Shopify Apps for Automating Your Store"
+          url="https://ecommercemanager.co/shopify/top-shopify-apps-for-automating-your-store-in-x/"
+          date="July 2026"
+          datetime="2026-07-07"
+          format="Featured"
+          argument="Stack Architect is featured here, where the free automation stack is recommended alongside the paid tools it replaces."
+        />
+        <PressCitation
+          outlet="eCommerce Manager"
+          title="Going Global: Ecommerce Leaders Share International Expansion Strategies"
+          url="https://ecommercemanager.co/ecommerce/going-global-ecommerce-leaders-share-international-expansion-strategies/"
+          date="July 2026"
+          datetime="2026-07-20"
+          format="Contribution"
+          argument="Treat cross-border localisation as an automation problem rather than a translation one."
+        />
+        <PressCitation
+          outlet="eCommerce Manager"
+          title="Effective Shopify Pop-Up Forms: Tips &amp; Best Practices"
+          url="https://ecommercemanager.co/shopify/effective-shopify-pop-up-forms-tips-best-practices/"
+          date="July 2026"
+          datetime="2026-07-31"
+          format="Contribution"
+          argument="Shared proven two-step intent strategies for Shopify pop-up forms."
+        />
+        <PressCitation
+          outlet="CTO Sync"
+          title="Deciding when engineering teams should pay down technical debt"
+          url="https://ctosync.com/qa/deciding-when-engineering-teams-pay-down-technical-debt/"
+          date=""
+          format="Interview"
+          argument="The same prioritisation thinking that shapes how the tools and guides here are built and maintained."
+        />
+        <PressCitation
+          outlet="Informatics Magazine"
+          title="Balance Data Pipeline Debt with New Delivery Demands"
+          url="https://informaticsmagazine.com/qa/balance-data-pipeline-debt-with-new-delivery-demands/"
+          date="August 2026"
+          datetime="2026-08-17"
+          format="Q&amp;A"
+          argument="When pipeline debt collides with new delivery demands, my rule is to require absolute technical determinism before model creation. Build the deterministic pipeline first and the model second, because a model sitting on a pipeline you cannot reason about produces outputs you cannot verify — the same failure mode the free stacks documented here are engineered to avoid."
+        />
+        <PressCitation
+          outlet="TechRound"
+          title="Quite Contrary: The Real Reason Enterprise AI Pilots Fail"
+          url="https://techround.co.uk/artificial-intelligence/quite-contrary-the-real-reason-enterprise-ai-pilots-fail-according-to-chase-w-hughes/"
+          date="August 2026"
+          datetime="2026-08-12"
+          format="18-contributor panel"
+          argument="Enterprise AI pilots fail for architectural reasons rather than political ones: generative models and agentic protocols like MCP are non-deterministic, and bolting them onto legacy REST APIs that assume explicit schemas and predictable state boundaries — with no intermediate validation or event-driven orchestration — breaks at the boundary layer, leaving an operator to hand-verify every output against a brittle database until that bottleneck destroys the ROI. The fix I put forward is replacing fragile polling and middleman APIs with event-driven pipelines that enforce schema validation at ingestion."
+        />
+        {/* MAKERSPACE — the full treatment: our contributed quote verbatim,
+            the attribution line the outlet printed it under, the outlet, the
+            linked title and the date. Every field comes from src/data/press.ts;
+            nothing else from that 34-contributor article appears anywhere on
+            this site. */}
+        <PressCitation
+          outlet={quote.outlet}
+          title={quote.title}
+          url={quote.url}
+          date="August 2026"
+          datetime={quote.datePublished}
+          format="34-contributor newsletter"
+          quote={quote.pullQuote}
+          attribution={quote.attribution}
+          argument="Checkout upsells belong in Shopify Checkout Extensibility, not in a third-party app that injects client-side code at the point of payment — the same server-side-first argument every blueprint on this site is built on."
+        />
+      </div>
+      <p><strong>Open-source &amp; community.</strong> Stack Architect tools are listed in <a href="https://github.com/kairichard/awesome-nocode-lowcode" target="_blank" rel="nofollow noopener">Awesome No-Code / Low-Code</a> and <a href="https://github.com/zhuima/awesome-cloudflare" target="_blank" rel="nofollow noopener">Awesome Cloudflare</a>, and the attribution-gap benchmark runs on an <a href="https://github.com/lsb11/stackarchitect" target="_blank" rel="nofollow noopener">open-source Cloudflare Workers backend</a>.</p>
+    </div>
+  </section>
+
+  <!-- ── EXPERTISE ── -->
+  <section class="section">
+    <div class="inner">
+      <div class="sec-tag">Technical expertise</div>
+      <h2 id="what-i-work-with-directly">What I work with directly</h2>
+      <p>The guides on this site cover areas I implement hands-on. Here is an honest breakdown of what I build and test directly:</p>
+      <div class="exp-grid">
+        <div class="exp-card">
+          <div class="exp-label">Server-side tracking</div>
+          <div class="exp-title">Meta CAPI &amp; Google Enhanced Conversions</div>
+          <div class="exp-body">Direct implementation of <a href="https://developers.facebook.com/docs/marketing-api/conversions-api" target="_blank" rel="noopener">Meta Conversions API</a> and <a href="https://support.google.com/google-ads/answer/9888656" target="_blank" rel="noopener">Google Enhanced Conversions</a> via Make.com webhooks — configured to reach the high Event Match Quality (7+) that well-matched server-side events achieve.</div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-label">Automation</div>
+          <div class="exp-title">Make.com &amp; Google Apps Script</div>
+          <div class="exp-body">Building <a href="https://www.make.com/en/help/tools/webhooks" target="_blank" rel="noopener">Make.com scenarios</a> for Shopify webhook routing, multi-branch logic, error handling, and retry patterns. Diagnosing and fixing <a href="https://developers.google.com/apps-script/guides/services/quotas" target="_blank" rel="noopener">Google Apps Script quota errors</a> at volume.</div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-label">Inventory &amp; reporting</div>
+          <div class="exp-title">Shopify Webhooks &amp; Google Sheets</div>
+          <div class="exp-body">Real-time order logging to Google Sheets via <a href="https://shopify.dev/docs/api/admin-rest/2024-01/resources/webhook" target="_blank" rel="noopener">Shopify Order payment webhooks</a>. Live P&amp;L dashboards tracking revenue, COGS, ad spend, and net profit — no BI tool required.</div>
+        </div>
+        <div class="exp-card">
+          <div class="exp-label">TikTok &amp; email</div>
+          <div class="exp-title">TikTok Events API &amp; Systeme.io</div>
+          <div class="exp-body">Server-side <a href="https://business-api.tiktok.com/portal/docs?id=1771100786590721" target="_blank" rel="noopener">TikTok Events API</a> via Make.com — built to address the conversions iOS ITP strips from browser-only tracking. Replicating Klaviyo automations on Systeme.io's free plan with full parity.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SHIPPED PRODUCT (E-E-A-T proof of work) ── -->
+  <section class="section-alt">
+    <div class="inner">
+      <div class="sec-tag">Proof of work</div>
+      <h2 id="i-ship-products-not-just-guides">I ship products, not just guides</h2>
+      <p>The clearest test of whether someone understands Shopify inventory is whether they can build for it. <strong>StockLog</strong> is my Shopify app — a persistent stock ledger that decrements on orders, restocks on cancellations and refunds, imports Stocky CSV exports ahead of the 31 August 2026 shutdown, and keeps a timestamped audit trail of every movement. Its Shopify App Store listing is dated August 2026, and it costs {formatMonthly(STOCKLOG_PRICE)}.</p>
+      <a href="https://stocklog.onrender.com/" target="_blank" rel="noopener" style="display:block;margin:22px 0 10px;border:1px solid var(--line,#2a2f2a);border-radius:12px;overflow:hidden;">
+        <img src="/images/stocklog-app.webp" alt="StockLog's live product page showing its Stocky import, retry-safe order tracking, and refund restocking features" width="1200" height="622" loading="lazy" style="display:block;width:100%;height:auto;" />
+      </a>
+      <p class="figure-caption">The live product at <a href="https://stocklog.onrender.com/" target="_blank" rel="noopener">stocklog.onrender.com</a> — every inventory guide on this site is informed by building it.</p>
+    </div>
+  </section>
+
+  <!-- ── TRANSPARENCY ── -->
+  <section class="section">
+    <div class="inner">
+      <div class="sec-tag">How this site works</div>
+      <h2 id="full-transparency">Full transparency</h2>
+      <div class="transparency">
+        <div class="t-row">
+          <div class="t-icon">$</div>
+          <span id="affiliates"></span><div class="t-text"><strong>Affiliate links fund this resource.</strong> Stack Architect uses affiliate links to Make.com, Systeme.io, Tidio, Gorgias, GetResponse, Beehiiv, and Google Workspace. If you sign up via a link on this site, I may earn a commission at no extra cost to you. I only recommend tools I use and have tested hands-on myself. Affiliate relationships do not influence which tools are recommended — if a free alternative exists, it is always listed first.</div>
+        </div>
+        <div class="t-row">
+          <div class="t-icon">0</div>
+          <div class="t-text"><strong>The tools are free forever.</strong> No tool on this site has a paid tier or will ever move behind a paywall. The <a href="/pro/">$24 Complete Kit</a> is a one-time purchase of pre-built files — four Make.com JSON blueprints and two Google Sheets templates — not a gated version of the free guides. Everything in the kit can be built manually from the free guides.</div>
+        </div>
+        <div class="t-row">
+          <div class="t-icon">✓</div>
+          <div class="t-text"><strong>Numbers are sourced or clearly framed.</strong> The Event Match Quality target (7+) reflects what well-matched server-side events achieve. Savings ranges reflect current Shopify App Store pricing, cross-referenced as of July 2026. The 20–40% signal-loss estimate this site used to carry was <a href="/how-we-test/#the-20-40-figure">retracted on 4 September 2026</a>; we now publish no gap magnitude at all. See <a href="https://developers.facebook.com/docs/marketing-api/conversions-api/using-the-api" target="_blank" rel="noopener">Meta's own CAPI documentation</a>.</div>
+        </div>
+        <div class="t-row">
+          <div class="t-icon">↗</div>
+          <div class="t-text"><strong>External sources are cited throughout.</strong> Where guides reference API behaviour, platform documentation, or third-party specifications, the source is linked directly to the official documentation. Platform pricing and API behaviour change — always verify current details directly with the vendor before deployment.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TOOLS ── -->
+  <section class="section-alt">
+    <div class="inner">
+      <div class="sec-tag">Free tools on this site</div>
+      <h2 id="what-i-ve-built">What I've built</h2>
+      <p>Six free tools, 21 calculators, and a guide library covering every workflow in the free Shopify automation stack. All free forever, all open-source.</p>
+      <div class="tools-list">
+        <a href="/capi-shield/" class="tool-row">
+          <span class="tool-name">CAPI Shield — Meta + Google server-side tracking</span>
+          <span class="tool-saving">saves $145–$650/mo</span>
+        </a>
+        <a href="/shopify-google-ads-conversion-tracking/" class="tool-row">
+          <span class="tool-name">Google Ads Enhanced Conversions — free GCLID recovery</span>
+          <span class="tool-saving">saves $29–$375/mo</span>
+        </a>
+        <a href="/stocky-swap/" class="tool-row">
+          <span class="tool-name">Stocky Swap — free inventory replacing Shopify Stocky (Aug 2026)</span>
+          <span class="tool-saving">saves $29–$199/mo</span>
+        </a>
+        <a href="/tiktok-events-api-shopify/" class="tool-row">
+          <span class="tool-name">TikTok Events API — free server-side tracking via Make.com</span>
+          <span class="tool-saving">saves $39–$299/mo</span>
+        </a>
+        <a href="/replace-klaviyo-free/" class="tool-row">
+          <span class="tool-name">Replace Klaviyo Free — Systeme.io unlimited emails</span>
+          <span class="tool-saving">saves $20+/mo</span>
+        </a>
+        <a href="/shopify-profit-loss-automation/" class="tool-row">
+          <span class="tool-name">P&amp;L Auto — live profit and loss in Google Sheets</span>
+          <span class="tool-saving">saves $19–$299/mo</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA ── -->
+  <div class="cta-strip">
+    <div class="cta-inner">
+      <div class="cta-text">
+        <h3>Start replacing paid apps — free, in under 10 minutes</h3>
+        <p>No code required. Every tool deploys via Make.com's free tier. No subscriptions, ever.</p>
+      </div>
+      <a href="/" class="btn">See the free stack →</a>
+    </div>
+  </div>
+
+  <!-- ── CONTACT ── -->
+  <section class="section">
+    <div class="inner">
+      <div class="sec-tag">Contact</div>
+      <h2 id="get-in-touch">Get in touch</h2>
+      <p>For deployment support, tool questions, or feedback. Most questions are already answered in the guides and FAQ — but if not, the support email is monitored daily.</p>
+      <div class="contact-grid">
+        <div class="contact-card">
+          <div class="contact-label">Support &amp; questions</div>
+          <a href="mailto:support@stackarchitect.xyz" class="contact-link">support@stackarchitect.xyz</a>
+          <div class="contact-desc">Deployment questions, tool issues, feedback</div>
+        </div>
+        <div class="contact-card">
+          <div class="contact-label">LinkedIn</div>
+          <a href="https://www.linkedin.com/in/luke-stackarchitect" target="_blank" rel="noopener" class="contact-link">Stack Architect on LinkedIn →</a>
+          <div class="contact-desc">Updates, new tools, and automation tips</div>
+        </div>
+        <div class="contact-card">
+          <div class="contact-label">Source code</div>
+          <a href="https://github.com/lsb11/stackarchitect" target="_blank" rel="noopener" class="contact-link">View the source on GitHub →</a>
+          <div class="contact-desc">Inspect, fork, and rebuild any tool</div>
+        </div>
+        <div class="contact-card">
+          <div class="contact-label">Guides &amp; documentation</div>
+          <a href="/shopify-automation-guides/" class="contact-link">All deployment guides →</a>
+          <div class="contact-desc">Step-by-step guides for every tool</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+<div class="authorcard-wrap">
+  <AuthorCard press />
+</div>
+</Base>
+
+<style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --sans:'Inter',-apple-system,sans-serif;
+      --mono:'JetBrains Mono',monospace;
+      --bg:#080c0a;--bg-2:#0c110f;--bg-3:#111916;
+      --g:#34d377;--g-dim:rgba(52,211,119,.06);--g-b:rgba(52,211,119,.18);
+      --border:rgba(255,255,255,.07);
+      --text:#f2f5f3;--text-2:#b6c0ba;--text-3:#93a09a;--text-4:#93a09a;
+      --red:#ef4444;--amber:#f59e0b;--r:8px
+    }
+    body{font-family:var(--sans);background:var(--bg);color:var(--text);line-height:1.7;-webkit-font-smoothing:antialiased}
+    a{color:var(--g);text-decoration:none}a:hover{text-decoration:underline}
+    /* Breadcrumb */
+    .bc{max-width:900px;margin:0 auto;padding:14px 24px 0;font-family:var(--mono);font-size:11px;color:var(--text-4);display:flex;gap:6px;align-items:center}
+    .bc a{color:var(--text-4);text-decoration:none}.bc a:hover{color:var(--g)}
+    /* Hero */
+    .hero{padding:64px 24px 52px;background:var(--bg)}
+    .hero-inner{max-width:760px;margin:0 auto}
+    .tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--g);background:var(--g-dim);border:1px solid var(--g-b);padding:4px 12px;border-radius:4px;display:inline-block;margin-bottom:22px}
+    .hero h1{font-size:clamp(34px,5.5vw,54px);font-weight:700;letter-spacing:-.04em;line-height:1.04;color:var(--text);margin-bottom:10px}
+    /* Portrait, not avatar. At 96px beside a 54px H1 it read as a UI element;
+       150px is large enough to be a photograph of a person. */
+    .hero-portrait{width:150px;height:150px;border-radius:50%;object-fit:cover;border:2px solid var(--border);flex-shrink:0;display:block}
+    .hero-id{display:flex;margin-bottom:22px}
+    .hero-id-text{min-width:0}
+    /* (a) Stacked: portrait above the H1, left-aligned with the rest of the
+       column. The tag, lead and credential strip are all left-aligned, so a
+       centred portrait+H1 would leave the block hanging off its own axis. */
+    .hero-id--a{flex-direction:column;align-items:flex-start;gap:20px}
+    /* (b) Two-column split, type bottom-aligned so the H1 baseline meets the
+       lower edge of the portrait rather than its centre. */
+    .hero-id--b{flex-direction:row;align-items:flex-end;gap:24px}
+    .hero-role{font-family:var(--mono);font-size:12px;color:var(--g);letter-spacing:.08em;display:flex;align-items:center;gap:10px}
+    .hero-role::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--g);animation:ping 2.2s ease-in-out infinite}
+    @keyframes ping{0%,100%{opacity:1}50%{opacity:.3}}
+    .hero-lead{font-size:17px;color:var(--text-3);line-height:1.85;margin-bottom:32px;max-width:640px}
+    /* Credential strip */
+    .cred-strip{display:flex;flex-wrap:wrap;gap:8px}
+    .cred{font-family:var(--mono);font-size:10px;color:var(--text-4);border:1px solid var(--border);background:var(--bg-2);padding:6px 12px;border-radius:4px;display:flex;align-items:center;gap:6px;white-space:nowrap}
+    .cred-dot{width:5px;height:5px;border-radius:50%;background:var(--g);flex-shrink:0}
+    .cred-link{color:var(--text-4);text-decoration:none}.cred-link:hover{color:var(--g);text-decoration:none}
+    /* Sections */
+    .section{padding:60px 24px;background:var(--bg)}
+    .section-alt{padding:60px 24px;background:var(--bg-2)}
+    .inner{max-width:760px;margin:0 auto}
+    .sec-tag{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-4);margin-bottom:12px}
+    h2{font-size:clamp(20px,3vw,26px);font-weight:800;letter-spacing:-.025em;color:var(--text);margin-bottom:16px;line-height:1.2}
+    p{font-size:15px;color:var(--text-3);line-height:1.85;margin-bottom:16px}
+    p:last-child{margin-bottom:0}
+    strong{color:var(--text)}
+    /* Expertise grid */
+    .exp-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:28px}
+    .exp-card{border:1px solid var(--border);border-radius:var(--r);padding:20px 22px;background:var(--bg-3)}
+    .exp-label{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--g);margin-bottom:8px}
+    .exp-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;line-height:1.3}
+    .exp-body{font-size:13px;color:var(--text-3);line-height:1.65}
+    .exp-body a{color:var(--g);text-decoration:underline;text-underline-offset:2px}
+    /* Figure caption — was an inline font-size, the same type-scale escape as
+       the h2 on the removed Related App Alternatives block. */
+    .figure-caption{font-size:13px;color:var(--text-4)}
+    /* Press citations */
+    .press-heading{font-size:15px;font-weight:700;color:var(--text);letter-spacing:-.01em;margin:32px 0 14px}
+    .press-grid{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+    /* Author card */
+    .authorcard-wrap{max-width:860px;margin:0 auto 60px;padding:0 24px}
+    /* Methodology */
+    .methodology{border:1px solid var(--g-b);background:var(--g-dim);border-radius:var(--r);padding:26px 30px;margin-top:28px}
+    .methodology-label{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--g);margin-bottom:16px;text-transform:uppercase}
+    .methodology p{font-size:14px;color:var(--text-3);line-height:1.75;margin-bottom:20px}
+    .method-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .m-item{background:rgba(0,0,0,.35);border-radius:6px;padding:14px 16px;border:1px solid rgba(52,211,119,.08)}
+    .m-source{font-family:var(--mono);font-size:11px;font-weight:700;color:var(--g);margin-bottom:4px}
+    .m-desc{font-size:12px;color:var(--text-4);line-height:1.55}
+    /* Transparency */
+    .transparency{border:1px solid var(--border);border-radius:var(--r);background:var(--bg-3);overflow:hidden;margin-top:28px}
+    .t-row{display:flex;gap:16px;align-items:flex-start;padding:18px 22px;border-bottom:1px solid var(--border)}
+    .t-row:last-child{border-bottom:none}
+    .t-icon{font-family:var(--mono);font-size:14px;color:var(--g);flex-shrink:0;width:22px;padding-top:1px}
+    .t-text{font-size:14px;color:var(--text-3);line-height:1.7}
+    .t-text strong{color:var(--text)}
+    .t-text a{color:var(--g)}
+    /* Tools */
+    .tools-list{display:flex;flex-direction:column;gap:8px;margin-top:24px}
+    .tool-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg-3);text-decoration:none;transition:border-color .18s}
+    .tool-row:hover{border-color:var(--g-b);text-decoration:none}
+    .tool-name{font-size:14px;font-weight:600;color:var(--text)}
+    .tool-saving{font-family:var(--mono);font-size:11px;color:var(--g);white-space:nowrap}
+    /* Contact */
+    .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:24px}
+    .contact-card{border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;background:var(--bg-3)}
+    .contact-label{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--text-4);margin-bottom:10px}
+    .contact-link{font-size:14px;font-weight:600;color:var(--g);text-decoration:none}
+    .contact-link:hover{text-decoration:underline}
+    .contact-desc{font-size:12px;color:var(--text-4);margin-top:5px;line-height:1.5}
+    /* CTA strip */
+    .cta-strip{background:var(--bg-3);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:40px 24px}
+    .cta-inner{max-width:760px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap}
+    .cta-text h3{font-size:18px;font-weight:800;color:var(--text);margin-bottom:6px;letter-spacing:-.02em}
+    .cta-text p{font-size:14px;color:var(--text-3);margin:0}
+    .btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--sans);font-size:14px;font-weight:700;padding:13px 26px;border-radius:var(--r);background:var(--g);color:#0c0f0d;text-decoration:none;transition:opacity .2s,transform .2s;white-space:nowrap}
+    .btn:hover{opacity:.88;transform:translateY(-1px);text-decoration:none}
+    @media(max-width:640px){
+      .exp-grid,.method-grid,.contact-grid{grid-template-columns:1fr}
+      .hero-id--b{flex-direction:column;align-items:flex-start;gap:18px}
+      .hero-portrait{width:120px;height:120px}
+      .hero{padding:44px 16px 36px}
+      .section,.section-alt{padding:44px 16px}
+      .cta-inner{flex-direction:column;align-items:flex-start}
+    }
+  </style>

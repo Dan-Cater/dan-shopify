@@ -1,0 +1,51 @@
+# build output
+dist/
+# generated types
+.astro/
+
+# dependencies
+node_modules/
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+
+# environment variables
+.env
+.env.production
+
+# macOS-specific files
+.DS_Store
+
+# jetbrains setting folder
+.idea/
+.wrangler
+
+# Patch files — never commit these
+*.patch
+*.patch
+.canonical-backup/
+.archived-pages/
+
+# Local backups and one-off deploy scripts
+*.backup
+*.move3backup
+deploy-expansion-*.sh
+.astro-indexnow-cache.json
+*.bak
+*.bak
+*.bak*
+gsc-key.json
+gsc-coverage-report.csv
+.pricing-backup-*/
+.seo-fix-backup-*
+.seo-fix-backup-path
+
+service_account.json
+claims.csv
+.seo-snap/
+seo-snapshot.mjs
+seo-diff.mjs
